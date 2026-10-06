@@ -1,4 +1,4 @@
-# 黑白反转（Black-White Flip）
+# 黑白反转 Lightup（Black-White Flip）
 
 点一个方块，它和上下左右相邻的方块一起反色（白变黑、黑变白）；把所有方块恢复成白色即通关。
 角上的方块影响 3 格，边上 4 格，中间 5 格。手机浏览器直接打开就能玩。
@@ -27,7 +27,8 @@
 ## 部署（GitHub Pages）
 
 把三个文件放在仓库根目录，Settings → Pages → Deploy from a branch → `main` / `(root)`，
-然后访问 `https://<你的用户名>.github.io/<仓库名>/`。
+部署完成后访问（本仓库地址）：
+`https://gingerrt.github.io/black-white-flip-lightup/`
 
 ## 追白法一句话
 
