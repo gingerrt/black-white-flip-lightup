@@ -43,6 +43,9 @@ button:disabled{opacity:.45}
 .cell{width:14px;height:14px;border-radius:3px;background:#fff;border:1px solid #d9dde6}
 .cell.on{background:#20242c;border-color:#0e1116}
 .cell.mark{background:#fde68a;border-color:#f59e0b}
+.cell.bad{background:#fecaca;border-color:#dc2626}
+.pick{width:20px;height:20px;border-radius:4px;background:#fff;border:1px solid #c9cfda}
+.pick.on{background:#3b82f6;border-color:#2f6dd0}
 </style>
 </head>
 <body>
@@ -82,8 +85,59 @@ button:disabled{opacity:.45}
     <p>如果某个布局 b 在 v 的黑点位置上有<b>奇数</b>个黑块，就和 v 的性质矛盾——永远还原不了，也就是无解。校验向量的个数就是 k：k = 0 表示不存在这种障碍（全可解）；k &gt; 0 时，恰好 1/2^k 的布局能躲开所有障碍。</p>
     <p id="basisTitle"></p>
     <div class="grid" id="basisGrid"></div>
-    <div class="tip">黑格 = 校验向量里为 1 的位置。下面例子里被判定的格子会用黄色标出来。</div>
+    <div class="tip">黑格 = 校验向量里为 1 的位置。下面例子里被判定的格子会用黄色标出来。下一节会讲这些校验向量究竟是怎么冒出来的。</div>
   </div>
+  <div class="card">
+    <h2>一步步推导：从 A·x = b 到"校验向量"</h2>
+    <p><b>第 1 步（把游戏写成方程）。</b>把每格"点不点"记成未知数 x（0 或 1）。按下一格会被翻色的 5 个格子（自己 + 上下左右）组成一个"十字"；矩阵 A 的每一列就是一个十字，b 就是当前的黑白布局。要解的是 <b>A·x = b</b>。</p>
+    <p><b>第 2 步（什么叫做有解）。</b>A·x = b 有解，意思就是 b 恰好等于"若干个十字的异或和"。</p>
+    <p><b>第 3 步（找一个特殊的图案 v）。</b>假设有图案 v 满足：把它盖在<b>任意</b>一个十字上，重叠的格子数永远是<b>偶数</b>。写成公式就是 vᵀA = 0，也就是 v 在 A 的"左零空间"里。</p>
+    <p><b>第 4 步（两边同乘 vᵀ）。</b>如果 b 可解，那么 vᵀb = vᵀ(A·x) = (vᵀA)·x = 0。<br>翻译成人话：<b>这个布局在 v 的黑格位置上必须有偶数个黑块</b>。</p>
+    <p><b>第 5 步（它还是完整的判据）。</b>线性代数告诉我们反过来也成立：只要对<b>每一个</b>这样的 v 都有 vᵀb = 0，b 就一定可解。所以每个 v 相当于一条"体检项目"。</p>
+    <p><b>第 6 步（数一数）。</b>所有这样的 v 组成一个线性空间，维数就是 k（"独立体检项目"的条数）。刚才的推导说明：可解布局 = 同时通过这 k 条检查的布局。</p>
+    <p><b>第 7 步（得到比例和解数）。</b>n 个格子共有 2ⁿ 种布局，每条独立检查各砍掉一半，所以可解比例 = 1/2^k；另一头，解集是"一个特解 + k 维零空间"，所以每个可解布局恰好有 2^k 组点法。前面表格里的数字（4×4 → k=4、1/16；9×9 → k=8、1/256）就是这么来的。</p>
+  </div>
+
+  <div class="card">
+    <h2>校验向量长什么样：动手造一个</h2>
+    <p>"每个十字都盖住偶数个格子"这个条件可以像<b>追白法</b>一样一行行往下递推：</p>
+    <p><b>① 第 0 行随便选</b>；<br>
+      <b>② 第 1 行被第 0 行逼出来：</b>v[1][c] = v[0][c-1] ⊕ v[0][c] ⊕ v[0][c+1]；<br>
+      <b>③ 之后每行都由上面两行决定：</b>v[r+1][c] = v[r-1][c] ⊕ v[r][c-1] ⊕ v[r][c] ⊕ v[r][c+1]；<br>
+      <b>④ 最后一行也得满足条件</b>，这一步叫"收口"，它反过来对第一行提出要求。</p>
+    <p>第一行共有 2^n 种选法，能收口的那些（第一行 + 递推出来的整张图）就是<b>校验向量</b>，数量正好是 2^k。</p>
+    <p>为什么 k 跟尺寸有关？因为"收口条件"就是追白法页面里那个响应矩阵 M：能收口的第一行 = M 的零空间，k = 零空间维数。<b>4×4 的 M 是零矩阵</b>（rank 0），第一行怎么选都能收口，所以有 16 个校验向量；<b>5×6 的 M 满秩</b>，只有全 0 能收口，所以没有非零校验向量、全可解。</p>
+    <p id="labTitle"></p>
+    <div class="grid" id="firstRow"></div>
+    <div class="grid" id="builtGrid" style="margin-top:10px"></div>
+    <div class="verdict" id="labVerdict"></div>
+    <button id="labRandom" style="margin-top:8px">随机第一行</button>
+    <button id="labClear" style="margin-top:6px">清空第一行</button>
+    <button id="labCount" style="margin-top:6px">数一数：这个尺寸能收口的第一行共有几个</button>
+  </div>
+
+  <div class="card">
+    <h2>为什么偏偏是"这几种"尺寸</h2>
+    <p>因为收口条件 M 完全由尺寸决定（同一套递推走"行数"步的结果），所以"有没有非零校验向量"会随尺寸<b>周期性</b>地重复。固定行数 m、让列数 n 变大，用代码从 n=2 一直数到 n=30，实测的规律是：</p>
+    <div class="mono">2×n：n 为奇数（周期 2）
+3×n：n ≡ 2 (mod 3)（周期 3）
+4×n：n ≡ 4 (mod 5)（周期 5）
+5×n：n mod 6 属于 {1,2,3,5}（周期 6）
+6×n：n ≡ 8 (mod 9)（周期 9）
+7×n：n ≡ 2 (mod 3)（周期 3）
+8×n：最小周期 14
+9×n：最小周期 15</div>
+    <p>正方形里（2~25），有死局的是：<b>4×4、5×5、9×9、11×11、14×14、16×16、17×17、19×19、23×23、24×24</b>（k 从 2 到 16 不等）；其余正方形（3×3、6×6、7×7、8×8、10×10、12×12、25×25……）都是全可解。</p>
+    <p>更精确地说，k 可以用 GF(2) 上的一串多项式算出来（这个公式我在 2×2 ~ 25×25 的全部尺寸上用代码验证过，0 处不符）：</p>
+    <div class="mono">k(m, n) = deg gcd( D_m(x), D_n(x+1) )
+
+D_0 = 1,  D_1 = x,  D_{k+1} = x·D_k + D_{k-1}   （都在 GF(2) 上算）
+
+前几项：D_2 = x²+1, D_3 = x³, D_4 = x⁴+x²+1,
+       D_5 = x⁵+x, D_6 = x⁶+x⁴+1, D_7 = x⁷</div>
+    <p>两个多项式有没有公共因子、公共因子的次数是多少，就决定了 k。这些多项式的"周期"只有固定的那几个数（2、3、5、6、9、14、15……），所以有死局的尺寸会按这些周期重复出现——这就是"为什么是这几种尺寸"的根本原因。</p>
+  </div>
+
 
   <div class="card">
     <h2>详细过程：抓一个无解例子走一遍</h2>
@@ -192,6 +246,69 @@ function drawGrid(el, r, c, mask, markMask) {
   }
 }
 
+/* ---------- 互动实验：亲手造一个校验向量 ---------- */
+let firstMask = 0;
+
+function buildValidVector(r, c, fm) {
+  const v = Array.from({ length: r }, () => new Array(c).fill(0));
+  for (let j = 0; j < c; j++) v[0][j] = (fm >> j) & 1;
+  const val = (i, j) => (i < 0 || i >= r || j < 0 || j >= c) ? 0 : v[i][j];
+  if (r > 1) {
+    for (let j = 0; j < c; j++) v[1][j] = val(0, j) ^ val(0, j - 1) ^ val(0, j + 1);
+  }
+  for (let i = 1; i < r - 1; i++) {
+    for (let j = 0; j < c; j++) {
+      v[i + 1][j] = val(i - 1, j) ^ val(i, j) ^ val(i, j - 1) ^ val(i, j + 1);
+    }
+  }
+  let mask = 0n, bad = 0;
+  for (let i = 0; i < r; i++) {
+    for (let j = 0; j < c; j++) if (v[i][j]) mask |= 1n << BigInt(i * c + j);
+  }
+  for (let j = 0; j < c; j++) {
+    const s = val(r - 2, j) ^ val(r - 1, j - 1) ^ val(r - 1, j) ^ val(r - 1, j + 1);
+    if (s) bad |= 1 << ((r - 1) * c + j);
+  }
+  return { mask, bad };
+}
+
+function renderLab() {
+  const r = rows, c = cols;
+  $("#labTitle").textContent = `下面点亮第一行的格子（当前尺寸 ${r}×${c}），看它能不能收口：`;
+  const fr = $("#firstRow");
+  fr.innerHTML = "";
+  fr.style.gridTemplateColumns = `repeat(${c}, 20px)`;
+  for (let j = 0; j < c; j++) {
+    const d = document.createElement("div");
+    d.className = "pick" + (((firstMask >> j) & 1) ? " on" : "");
+    d.addEventListener("click", () => { firstMask ^= 1 << j; renderLab(); });
+    fr.appendChild(d);
+  }
+  const built = buildValidVector(r, c, firstMask);
+  const bg = $("#builtGrid");
+  bg.innerHTML = "";
+  bg.style.gridTemplateColumns = `repeat(${c}, 14px)`;
+  for (let i = 0; i < r * c; i++) {
+    const d = document.createElement("div");
+    let cls = "cell";
+    if ((built.mask >> BigInt(i)) & 1n) cls += " on";
+    if ((built.bad >> i) & 1) cls += " bad";
+    d.className = cls;
+    bg.appendChild(d);
+  }
+  const el = $("#labVerdict");
+  if (built.bad) {
+    el.className = "verdict bad";
+    el.textContent = "❌ 收口失败：最后一行有格子的“十字”盖住了奇数个点（红框就是那些格子）。换一种第一行试试。";
+  } else if (built.mask === 0n) {
+    el.className = "verdict";
+    el.textContent = "第一行全灭，得到全 0 图案——它是一个平凡的校验向量（每个尺寸都有）。";
+  } else {
+    el.className = "verdict ok";
+    el.textContent = "✅ 收口成功！这个图案就是一个校验向量：任意十字都恰好盖住偶数个点。";
+  }
+}
+
 function refreshSize() {
   $("#rowsVal").textContent = rows;
   $("#colsVal").textContent = cols;
@@ -213,6 +330,8 @@ function refreshSize() {
   $("#exWrap").classList.add("hidden");
   $("#genTip").textContent = k === 0 ? "这个尺寸没有无解例子——这正是“全可解”的含义。" : "";
   $("#genBtn").disabled = k === 0;
+  firstMask = 0;
+  renderLab();
 }
 
 document.querySelectorAll(".step").forEach((b) => {
@@ -258,9 +377,25 @@ $("#demoBtn").addEventListener("click", () => {
   location.href = `gauss_demo.html#b=${rows},${cols},${hex}`;
 });
 
+$("#labRandom").addEventListener("click", () => {
+  firstMask = Math.floor(Math.random() * (1 << cols));
+  renderLab();
+});
+$("#labClear").addEventListener("click", () => { firstMask = 0; renderLab(); });
+$("#labCount").addEventListener("click", () => {
+  let good = 0;
+  for (let fm = 0; fm < (1 << cols); fm++) {
+    if (!buildValidVector(rows, cols, fm).bad) good++;
+  }
+  const k = parityBasis(rows, cols).length;
+  const el = $("#labVerdict");
+  el.className = "verdict";
+  el.textContent = `暴力枚举 2^${cols} = ${1 << cols} 种第一行：能收口的共 ${good} 个，也就是 ${good} 个校验向量；2^k = 2^${k} = ${2 ** k}，${good === 2 ** k ? "完全吻合 ✓" : "不一致（不该发生）"}`;
+});
+
 refreshSize();
 window.__sizes = {
-  parityBasis, syndromeOf, maskOfB,
+  parityBasis, syndromeOf, maskOfB, buildValidVector,
   get rows() { return rows; },
   get cols() { return cols; },
   get example() { return example; },
