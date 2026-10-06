@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#f2f3f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>追白法教学 · 黑白反转</title>
+<style>
+:root{--bg:#f2f3f7;--text:#1f2430;--muted:#6b7280;--accent:#3b82f6;--accent2:#2f6dd0;
+  --hint:#f59e0b;--ok:#15803d;--bad:#dc2626;--purple:#8b5cf6;--panel:#fff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);display:flex;justify-content:center;overscroll-behavior:none;
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Segoe UI",sans-serif}
+#app{width:100%;max-width:560px;min-height:100%;min-height:100dvh;display:flex;flex-direction:column;gap:8px;
+  padding:calc(10px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+h1{font-size:18px;margin:0}
+.link{font-size:13px;color:var(--accent);text-decoration:none}
+.tabs{display:flex;gap:8px}
+.tab{flex:1;border:0;border-radius:11px;padding:10px 6px;font-size:13px;font-family:inherit;background:#fff;color:var(--text);
+  box-shadow:0 1px 3px rgba(15,20,30,.08)}
+.tab.active{background:var(--accent);color:#fff}
+#status{font-size:12.5px;line-height:1.45;color:var(--muted);min-height:54px}
+#status.ok{color:var(--ok)} #status.bad{color:var(--bad)} #status.hint{color:var(--hint)}
+.boardRow{display:flex;justify-content:center}
+#board{background:#fff;border-radius:10px}
+.panel{background:#fff;border-radius:12px;padding:10px 12px;box-shadow:0 1px 3px rgba(15,20,30,.08);
+  max-height:38vh;overflow:auto}
+.sec{margin:0 0 8px}
+.secTitle{font-size:11.5px;color:var(--muted);margin-bottom:3px}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.5;margin:0;white-space:pre-wrap;word-break:break-all}
+.val{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+#rVal{color:var(--hint)} #pVal{color:var(--accent)}
+.bar{display:flex;gap:8px}
+button.action{flex:1;border:0;border-radius:12px;padding:11px 6px;font-size:13.5px;font-family:inherit;
+  background:var(--panel);color:var(--text);box-shadow:0 1px 3px rgba(15,20,30,.08);touch-action:manipulation}
+button.action:active{transform:translateY(1px)}
+button.primary{background:var(--accent);color:#fff}
+.hidden{display:none !important}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>追白法教学</h1>
+    <a class="link" href="index.html">← 返回游戏</a>
+  </header>
+  <div class="tabs">
+    <button class="tab active" id="tabDemo">① 一次追白演示</button>
+    <button class="tab" id="tabWhy">② 原理：方程从哪来</button>
+  </div>
+  <div id="status"></div>
+  <div class="boardRow"><canvas id="board"></canvas></div>
+
+  <div class="panel" id="panelDemo">
+    <div class="sec"><div class="secTitle">最后一行残留 r</div><div class="val" id="rVal">？</div></div>
+    <div class="sec"><div class="secTitle">第一行点法 p</div><div class="val" id="pVal">？</div></div>
+    <div class="sec"><div class="secTitle">方程组 M·p = r（右端已代入本局）</div><pre class="mono" id="sysBox"></pre></div>
+    <div class="sec"><div class="secTitle">逐位解出 p</div><pre class="mono" id="fxBox"></pre></div>
+  </div>
+
+  <div class="panel hidden" id="panelWhy">
+    <div class="sec"><div class="secTitle">① 单点指纹（M 的各列）</div><pre class="mono" id="mBox"></pre></div>
+    <div class="sec"><div class="secTitle">② 方程组 M·p = r</div><pre class="mono" id="sysBox2"></pre></div>
+    <div class="sec"><div class="secTitle">③ 异或消元求解</div><pre class="mono" id="elimBox"></pre></div>
+  </div>
+
+  <div class="bar">
+    <button class="action" id="prev">上一步</button>
+    <button class="action primary" id="next">下一步</button>
+    <button class="action" id="play">自动播放</button>
+  </div>
+  <div class="bar">
+    <button class="action" id="restart">重新演示</button>
+    <button class="action" id="reroll">换一局</button>
+  </div>
+</div>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+
+/* ---------- 基础逻辑 ---------- */
+function pressOn(board, rows, cols, i) {
+  const r = Math.floor(i / cols), c = i % cols;
+  const hit = (rr, cc) => { board[rr * cols + cc] ^= 1; };
+  hit(r, c);
+  if (r > 0) hit(r - 1, c);
+  if (r < rows - 1) hit(r + 1, c);
+  if (c > 0) hit(r, c - 1);
+  if (c < cols - 1) hit(r, c + 1);
+}
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+function scramble(rows, cols) {
+  const board = new Array(rows * cols).fill(0);
+  const cells = shuffle([...Array(rows * cols).keys()]);
+  for (const i of cells.slice(0, Math.max(4, Math.round(rows * cols * 0.4)))) pressOn(board, rows, cols, i);
+  if (!board.some((v) => v)) pressOn(board, rows, cols, Math.floor(Math.random() * board.length));
+  return board;
+}
+function chasePresses(base, rows, cols, top) {
+  const board = base.slice();
+  const presses = [];
+  for (const c of (top || [])) { pressOn(board, rows, cols, 0 * cols + c); presses.push([0, c]); }
+  for (let r = 1; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (board[(r - 1) * cols + c]) { pressOn(board, rows, cols, r * cols + c); presses.push([r, c]); }
+    }
+  }
+  return [board, presses];
+}
+const colCache = new Map();
+function chaseColumns(rows, cols) {
+  const key = rows + "x" + cols;
+  if (colCache.has(key)) return colCache.get(key);
+  const colsBits = [];
+  for (let i = 0; i < cols; i++) {
+    const white = new Array(rows * cols).fill(0);
+    const [after] = chasePresses(white, rows, cols, [i]);
+    let mask = 0;
+    for (let c = 0; c < cols; c++) if (after[(rows - 1) * cols + c]) mask |= 1 << c;
+    colsBits.push(mask);
+  }
+  colCache.set(key, colsBits);
+  return colsBits;
+}
+function residualOf(board, rows, cols) {
+  const [after] = chasePresses(board, rows, cols, []);
+  let r = 0;
+  for (let c = 0; c < cols; c++) if (after[(rows - 1) * cols + c]) r |= 1 << c;
+  return r;
+}
+function solveGf2(input, n) {
+  const data = input.slice();
+  let pivotRow = 0;
+  const pivots = [];
+  for (let col = 0; col < n; col++) {
+    let pick = -1;
+    for (let i = pivotRow; i < data.length; i++) if ((data[i] >> BigInt(col)) & 1n) { pick = i; break; }
+    if (pick < 0) continue;
+    [data[pivotRow], data[pick]] = [data[pick], data[pivotRow]];
+    for (let i = 0; i < data.length; i++) if (i !== pivotRow && ((data[i] >> BigInt(col)) & 1n)) data[i] ^= data[pivotRow];
+    pivots.push([pivotRow, col]);
+    pivotRow++;
+  }
+  for (let i = pivotRow; i < data.length; i++) if (data[i] === (1n << BigInt(n))) return null;
+  let sol = 0n;
+  for (const [row, col] of pivots) if ((data[row] >> BigInt(n)) & 1n) sol |= 1n << BigInt(col);
+  return sol;
+}
+function firstRowFor(rows, cols, residual) {
+  const columns = chaseColumns(rows, cols);
+  const eqs = [];
+  for (let c = 0; c < cols; c++) {
+    let row = 0n;
+    for (let i = 0; i < cols; i++) if ((columns[i] >> c) & 1) row |= 1n << BigInt(i);
+    if ((residual >> c) & 1) row |= 1n << BigInt(cols);
+    eqs.push(row);
+  }
+  return solveGf2(eqs, cols);
+}
+function eliminationEvents(input, n) {
+  const data = input.slice();
+  const out = [{ tag: "start", payload: null, snapshot: data.slice() }];
+  let pivotRow = 0;
+  const pivots = [];
+  for (let col = 0; col < n; col++) {
+    let pick = -1;
+    for (let i = pivotRow; i < data.length; i++) if ((data[i] >> BigInt(col)) & 1n) { pick = i; break; }
+    if (pick < 0) { out.push({ tag: "free", payload: col, snapshot: data.slice() }); continue; }
+    if (pick !== pivotRow) {
+      [data[pivotRow], data[pick]] = [data[pick], data[pivotRow]];
+      out.push({ tag: "swap", payload: [pick, pivotRow, col], snapshot: data.slice() });
+    } else out.push({ tag: "pivot", payload: [pivotRow, col], snapshot: data.slice() });
+    for (let i = 0; i < data.length; i++) {
+      if (i !== pivotRow && ((data[i] >> BigInt(col)) & 1n)) {
+        data[i] ^= data[pivotRow];
+        out.push({ tag: "eliminate", payload: [i, pivotRow, col], snapshot: data.slice() });
+      }
+    }
+    pivots.push([pivotRow, col]);
+    pivotRow++;
+  }
+  for (let i = pivotRow; i < data.length; i++) {
+    if (data[i] === (1n << BigInt(n))) { out.push({ tag: "contradiction", payload: i, snapshot: data.slice() }); return out; }
+  }
+  out.push({ tag: "consistent", payload: null, snapshot: data.slice() });
+  let sol = 0n;
+  for (const [row, col] of pivots) {
+    const bit = (data[row] >> BigInt(n)) & 1n;
+    if (bit) sol |= 1n << BigInt(col);
+    out.push({ tag: "solve", payload: [col, row, bit ? 1 : 0], snapshot: data.slice() });
+  }
+  out.push({ tag: "done", payload: sol, snapshot: data.slice() });
+  return out;
+}
+function rankFull(rows, cols) {
+  const vals = chaseColumns(rows, cols).filter((v) => v !== 0);
+  let rank = 0;
+  for (let col = 0; col < cols; col++) {
+    let pick = -1;
+    for (let i = rank; i < vals.length; i++) if ((vals[i] >> col) & 1) { pick = i; break; }
+    if (pick < 0) continue;
+    [vals[rank], vals[pick]] = [vals[pick], vals[rank]];
+    for (let i = 0; i < vals.length; i++) if (i !== rank && ((vals[i] >> col) & 1)) vals[i] ^= vals[rank];
+    rank++;
+  }
+  return rank === cols;
+}
+
+/* ---------- 状态 ---------- */
+const S = { rows: 5, cols: 6, board: [], mode: "demo", playing: false, timer: null };
+const D = { actions: [], index: -1, board: [], markers: {}, first: 0, second: 0,
+            residual: null, pMask: null, trueP: null, calcIndex: null, pBits: [],
+            fullRank: false, inv: null, terms: null };
+const W = { actions: [], index: -1, board: [], markers: {}, mRows: [],
+            systemReady: false, elim: null, doneP: null, residual: null };
+
+function setStatus(text, cls) { const el = $("#status"); el.textContent = text; el.className = cls || ""; }
+
+/* ---------- 面板工具 ---------- */
+function bitsStr(mask, cols) { let s = []; for (let c = 0; c < cols; c++) s.push((mask >> c) & 1); return s.join(" "); }
+function formulas() {
+  const cols = S.cols;
+  if (!D.inv) {
+    D.inv = [];
+    for (let j = 0; j < cols; j++) {
+      const p = firstRowFor(S.rows, cols, 1 << j);
+      D.inv.push(p === null ? 0n : p);
+    }
+    D.terms = [];
+    for (let i = 0; i < cols; i++) {
+      const t = [];
+      for (let j = 0; j < cols; j++) if ((D.inv[j] >> BigInt(i)) & 1n) t.push(j);
+      D.terms.push(t);
+    }
+  }
+  return D.terms;
+}
+function equationLines(r) {
+  const cols = S.cols, columns = chaseColumns(S.rows, cols);
+  const lines = [];
+  for (let c = 0; c < cols; c++) {
+    const terms = [];
+    for (let i = 0; i < cols; i++) if ((columns[i] >> c) & 1) terms.push("p" + (i + 1));
+    lines.push(`最后一行第${c + 1}格: ${terms.join(" ⊕ ") || "0"} = ${(r >> c) & 1}`);
+  }
+  return lines;
+}
+function fxLines() {
+  const cols = S.cols, terms = formulas(), r = D.residual;
+  const lines = [];
+  for (let i = 0; i < cols; i++) {
+    const sym = terms[i].map((j) => "r" + (j + 1)).join(" ⊕ ") || "0";
+    const bit = D.pBits[i];
+    let line;
+    if (bit === undefined || bit === null) line = `p${i + 1} = ${sym}`;
+    else if (terms[i].length) line = `p${i + 1} = ${sym} = ${terms[i].map((j) => (r >> j) & 1).join(" ⊕ ")} = ${bit}`;
+    else line = `p${i + 1} = 0`;
+    if (D.calcIndex === i && bit !== undefined && bit !== null && D.pMask === null) line = "▶ " + line;
+    lines.push(line);
+  }
+  return lines;
+}
+function updatePanel() {
+  if (S.mode === "demo") {
+    $("#rVal").textContent = D.residual === null ? "？" : bitsStr(D.residual, S.cols);
+    if (D.pMask !== null) $("#pVal").textContent = bitsStr(Number(D.pMask), S.cols);
+    else if (D.pBits.some((b) => b !== undefined && b !== null)) {
+      $("#pVal").textContent = D.pBits.map((b) => (b === undefined || b === null ? "？" : b)).join(" ");
+    } else $("#pVal").textContent = "？";
+    if (D.residual !== null && D.fullRank) {
+      $("#sysBox").textContent = equationLines(D.residual).join("\n");
+      $("#fxBox").textContent = fxLines().join("\n");
+    } else {
+      $("#sysBox").textContent = "";
+      $("#fxBox").textContent = D.residual !== null && !D.fullRank
+        ? "这个尺寸的 M 不可逆（同一串 r 可能有多个 p），用解方程组的方式给出其中一个解。" : "";
+    }
+  } else {
+    $("#mBox").textContent = W.mRows.length
+      ? W.mRows.map((m, j) => `只点第${j + 1}格 → ${bitsStr(m, S.cols)}`).join("\n") : "（还没做实验）";
+    $("#sysBox2").textContent = W.systemReady ? equationLines(W.residual).join("\n") : "（待生成）";
+    if (W.elim) {
+      const ev = W.elim;
+      const n = S.cols;
+      const hl = new Set();
+      if (ev.tag === "pivot") hl.add(ev.payload[0]);
+      else if (ev.tag === "swap") { hl.add(ev.payload[0]); hl.add(ev.payload[1]); }
+      else if (ev.tag === "eliminate") { hl.add(ev.payload[0]); hl.add(ev.payload[1]); }
+      else if (ev.tag === "solve") hl.add(ev.payload[1]);
+      else if (ev.tag === "contradiction") hl.add(ev.payload);
+      const head = "    " + [...Array(n).keys()].map((i) => i + 1).join(" ") + " | r";
+      const lines = [head];
+      ev.snapshot.forEach((row, i) => {
+        const cells = [];
+        for (let j = 0; j < n; j++) cells.push(String(Number((row >> BigInt(j)) & 1n)));
+        lines.push((hl.has(i) ? "▶ " : "  ") + cells.join(" ") + " | " + Number((row >> BigInt(n)) & 1n));
+      });
+      $("#elimBox").textContent = lines.join("\n");
+    } else $("#elimBox").textContent = "（待消元）";
+  }
+}
+
+/* ---------- 绘制 ---------- */
+function fitCanvas(canvas, w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.style.width = w + "px"; canvas.style.height = h + "px";
+  canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+function rr(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawBoard() {
+  const rows = S.rows, cols = S.cols;
+  const board = S.mode === "demo" ? D.board : W.board;
+  const markers = S.mode === "demo" ? D.markers : W.markers;
+  const maxW = Math.min(420, window.innerWidth - 40);
+  const cs = Math.max(14, Math.min(44, Math.floor(maxW / cols)));
+  const gap = 4;
+  const w = cols * cs + (cols - 1) * gap, h = rows * cs + (rows - 1) * gap;
+  const ctx = fitCanvas($("#board"), w, h);
+  ctx.clearRect(0, 0, w, h);
+  const at = (r, c) => [c * (cs + gap), r * (cs + gap)];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const [x, y] = at(r, c);
+    const on = !!board[r * cols + c];
+    rr(ctx, x, y, cs, cs, Math.max(4, cs * 0.16));
+    ctx.fillStyle = on ? "#20242c" : "#ffffff";
+    ctx.fill();
+    ctx.strokeStyle = on ? "#0e1116" : "#c9cfda";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  const draw = (list, color, row) => {
+    for (const c of (list || [])) {
+      const [x, y] = at(row, c);
+      rr(ctx, x + 1, y + 1, cs - 2, cs - 2, Math.max(4, cs * 0.16));
+      ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.stroke();
+    }
+  };
+  draw(markers.bottom, "#f59e0b", rows - 1);
+  draw(markers.calc_r, "#8b5cf6", rows - 1);
+  draw(markers.unit_bottom, "#f59e0b", rows - 1);
+  draw(markers.top, "#3b82f6", 0);
+  draw(markers.calc_p, "#3b82f6", 0);
+  draw(markers.unit_top, "#3b82f6", 0);
+  for (const [r, c] of (markers.flash || [])) {
+    const [x, y] = at(r, c);
+    rr(ctx, x + 1, y + 1, cs - 2, cs - 2, Math.max(4, cs * 0.16));
+    ctx.strokeStyle = "#10b981"; ctx.lineWidth = 2.5; ctx.stroke();
+  }
+}
+
+/* ---------- 演示模式（一次追白） ---------- */
+function resetD() {
+  D.index = -1; D.board = S.board.slice(); D.markers = {};
+  D.first = 0; D.second = 0; D.residual = null; D.pMask = null;
+  D.calcIndex = null; D.pBits = []; D.inv = null; D.terms = null;
+  $("#sysBox").textContent = ""; $("#fxBox").textContent = "";
+}
+function stepD() {
+  if (D.index >= D.actions.length - 1) return;
+  D.index++;
+  const a = D.actions[D.index];
+  D.markers = {};
+  let text = "";
+  if (a.tag === "note") text = a.text;
+  else if (a.tag === "press") {
+    for (const [r, c] of a.cells) pressOn(D.board, S.rows, S.cols, r * S.cols + c);
+    if (D.pMask === null) D.first += a.cells.length; else D.second += a.cells.length;
+    D.markers = { flash: a.cells };
+    text = `点 ${a.cells.length} 格：` + a.cells.slice(0, 8).map(([r, c]) => `(${r + 1},${c + 1})`).join("、");
+  } else if (a.tag === "residue") {
+    D.residual = a.residual;
+    D.markers = { bottom: [...Array(S.cols).keys()].filter((c) => (a.residual >> c) & 1) };
+    text = `追完了：上面 ${S.rows - 1} 行已经全白，只剩最后一行还有黑块，读成 0/1 串就是 r = ${bitsStr(a.residual, S.cols)}。`;
+  } else if (a.tag === "system") {
+    D.markers = { bottom: [...Array(S.cols).keys()].filter((c) => (D.residual >> c) & 1) };
+    text = "把 r 代进方程组：最后一行每一格给出一条方程，未知数是第一行各格点不点。下面逐条解出 p。";
+  } else if (a.tag === "calc") {
+    const i = a.i, terms = formulas()[i];
+    D.calcIndex = i;
+    D.pBits[i] = Number((D.trueP >> BigInt(i)) & 1n);
+    D.markers = {
+      bottom: [...Array(S.cols).keys()].filter((c) => (D.residual >> c) & 1),
+      calc_r: terms, calc_p: [i],
+    };
+    const sym = terms.map((j) => "r" + (j + 1)).join(" ⊕ ");
+    const dig = terms.map((j) => (D.residual >> j) & 1).join(" ⊕ ");
+    text = terms.length
+      ? `p${i + 1} = ${sym} = ${dig} = ${D.pBits[i]}：第一行第 ${i + 1} 格${D.pBits[i] ? "点" : "不点"}。（紫色是这条式子用到的 r 格）`
+      : `p${i + 1} = 0：这条式子里没有 r，第一行第 ${i + 1} 格不点。`;
+  } else if (a.tag === "solve") {
+    D.pMask = D.trueP;
+    D.markers = { top: [...Array(S.cols).keys()].filter((c) => (Number(D.pMask) >> c) & 1) };
+    text = `第一行点法 p = ${bitsStr(Number(D.pMask), S.cols)}。也就是说：第一遍根本不用猜，最后一行已经把答案写好了。`;
+  } else if (a.tag === "reset") {
+    D.board = S.board.slice(); D.markers = {};
+    text = "第一遍只是一次探测：现在把棋盘恢复原样，按算出来的 p 正式解一遍。";
+  } else if (a.tag === "top") {
+    D.markers = { top: [...Array(S.cols).keys()].filter((c) => (Number(D.pMask) >> c) & 1) };
+    const cells = [...Array(S.cols).keys()].filter((c) => (Number(D.pMask) >> c) & 1).map((c) => c + 1);
+    text = cells.length ? `第二遍：第一行先点第 ${cells.join("、")} 格，然后照常往下追白。`
+                        : "第二遍：第一行不用点，直接往下追白。";
+  } else if (a.tag === "dead") {
+    text = "最后一行残留超出了 M 的范围：这个局面无解——不存在任何第一行点法能救回来。";
+  } else if (a.tag === "done") {
+    text = D.board.some((v) => v) ? "演示结束时还有黑块（不应该发生）。"
+      : `全部变白 ✓ 第二遍一共 ${a.total} 步。整个过程只追了两遍、解了一个 ${S.cols} 元方程组，没有枚举任何东西。`;
+  }
+  setStatus(text, a.tag === "done" ? "ok" : (a.tag === "dead" ? "bad" : ""));
+  drawBoard(); updatePanel();
+}
+function planD() {
+  const rows = S.rows, cols = S.cols;
+  const acts = [{ tag: "note", text: "第一遍：第一行一格都不点，从上往下追白——看到上一行哪格是黑的，就点它正下方那格。" }];
+  const [after, presses] = chasePresses(S.board, rows, cols, []);
+  for (let r = 1; r < rows; r++) {
+    const cells = presses.filter((p) => p[0] === r);
+    if (cells.length) acts.push({ tag: "press", cells });
+  }
+  const residual = residualOf(S.board, rows, cols);
+  acts.push({ tag: "residue", residual });
+  const p = firstRowFor(rows, cols, residual);
+  if (p === null) { acts.push({ tag: "dead" }); return acts; }
+  D.trueP = p;
+  acts.push({ tag: "system" });
+  if (D.fullRank) for (let i = 0; i < cols; i++) acts.push({ tag: "calc", i });
+  acts.push({ tag: "solve" });
+  acts.push({ tag: "reset" });
+  acts.push({ tag: "top" });
+  const top = [];
+  for (let c = 0; c < cols; c++) if ((Number(p) >> c) & 1) top.push(c);
+  if (top.length) acts.push({ tag: "press", cells: top.map((c) => [0, c]) });
+  const [, presses2] = chasePresses(S.board, rows, cols, top);
+  for (let r = 1; r < rows; r++) {
+    const cells = presses2.filter((x) => x[0] === r);
+    if (cells.length) acts.push({ tag: "press", cells });
+  }
+  acts.push({ tag: "done", total: presses2.length });
+  return acts;
+}
+
+/* ---------- 原理模式 ---------- */
+function resetW() {
+  W.index = -1; W.board = new Array(S.rows * S.cols).fill(0); W.markers = {};
+  W.mRows = []; W.systemReady = false; W.elim = null; W.doneP = null;
+}
+function stepW() {
+  if (W.index >= W.actions.length - 1) return;
+  W.index++;
+  const a = W.actions[W.index];
+  W.markers = {};
+  let text = "";
+  if (a.tag === "note") text = a.text;
+  else if (a.tag === "unit") {
+    const j = a.j;
+    W.board = new Array(S.rows * S.cols).fill(0);
+    pressOn(W.board, S.rows, S.cols, j);
+    const [after] = chasePresses(W.board, S.rows, S.cols, []);
+    W.board = after;
+    let mask = 0;
+    for (let c = 0; c < S.cols; c++) if (after[(S.rows - 1) * S.cols + c]) mask |= 1 << c;
+    W.mRows.push(mask);
+    W.markers = { unit_top: [j], unit_bottom: [...Array(S.cols).keys()].filter((c) => (mask >> c) & 1) };
+    text = `第 ${j + 1} 列指纹：棋盘清空，第一行只点第 ${j + 1} 格、其它都不点，然后照常追白。最后一行剩下 ${bitsStr(mask, S.cols)}——这就是 M 的第 ${j + 1} 列。`;
+  } else if (a.tag === "system") {
+    W.systemReady = true;
+    W.board = S.board.slice();
+    W.markers = { unit_bottom: [...Array(S.cols).keys()].filter((c) => (W.residual >> c) & 1) };
+    text = "现在把 M 和本局的 r 写成方程组：最后一行每一格的残留 = 那些对应位置为 1 的第一行格子的异或和。";
+  } else if (a.tag === "elim") {
+    W.elim = a.ev;
+    const ev = a.ev;
+    if (ev.tag === "done") W.doneP = ev.payload;
+    if (ev.tag === "pivot") text = `第 ${ev.payload[0] + 1} 行第 ${ev.payload[1] + 1} 列是主元 1：用它做主元行。`;
+    else if (ev.tag === "swap") text = `交换第 ${ev.payload[1] + 1} 行和第 ${ev.payload[0] + 1} 行，让主元就位。`;
+    else if (ev.tag === "eliminate") text = `第 ${ev.payload[0] + 1} 行第 ${ev.payload[2] + 1} 列是 1：整行异或上主元行（第 ${ev.payload[1] + 1} 行）。`;
+    else if (ev.tag === "free") text = `第 ${ev.payload + 1} 列整列是 0：这个变量取 0。`;
+    else if (ev.tag === "consistent") text = "消元结束，没有 0 = 1 的矛盾：方程组有解。下面读每个主元行右端的数字。";
+    else if (ev.tag === "contradiction") text = `第 ${ev.payload + 1} 行剩下 0 = 1：矛盾，这个局面无解。`;
+    else if (ev.tag === "solve") text = `读出第一行第 ${ev.payload[0] + 1} 格：p${ev.payload[0] + 1} = ${ev.payload[2]}。`;
+    else text = `全部解完：p = ${bitsStr(Number(ev.payload), S.cols)}。`;
+  } else if (a.tag === "final") {
+    text = W.doneP === null
+      ? "对这个局面，消元出现了 0 = 1：方程组无解，也就是说不存在任何第一行点法能把它变全白。"
+      : `解得第一行点法 p = ${bitsStr(Number(W.doneP), S.cols)}，和“一次追白演示”里算出的完全一样。实际玩的时候这张表可以做一次：把 M 求逆，以后任何局面读出 r 代进去就知道第一行点哪几格。`;
+  }
+  setStatus(text, a.tag === "final" ? (W.doneP === null ? "bad" : "ok") : "");
+  drawBoard(); updatePanel();
+}
+function planW() {
+  const rows = S.rows, cols = S.cols;
+  W.residual = residualOf(S.board, rows, cols);
+  const acts = [
+    { tag: "note", text: "规矩一：同一格点两次等于没点（a ⊕ a = 0）；规矩二：点的顺序不影响结果。所以每格只要决定点(1)/不点(0)，翻转就是异或。" },
+    { tag: "note", text: "一个格子只被它自己和上下左右 5 格影响：第一行一旦定了，第二行就唯一确定（要清掉第一行剩的黑格，只有点它正下方），追白法就是一行行用到底。" },
+  ];
+  for (let j = 0; j < cols; j++) acts.push({ tag: "unit", j });
+  acts.push({ tag: "note", text: "把每次单点测试的“最后一行残留”竖着排起来，就是矩阵 M 的各列。整个过程是异或线性的：同时点好几格，最后一行残留就是这些指纹的异或和。" });
+  acts.push({ tag: "system" });
+  const columns = chaseColumns(rows, cols);
+  const eqs = [];
+  for (let c = 0; c < cols; c++) {
+    let row = 0n;
+    for (let i = 0; i < cols; i++) if ((columns[i] >> c) & 1) row |= 1n << BigInt(i);
+    if ((W.residual >> c) & 1) row |= 1n << BigInt(cols);
+    eqs.push(row);
+  }
+  for (const ev of eliminationEvents(eqs, cols)) {
+    if (ev.tag === "start") continue;
+    acts.push({ tag: "elim", ev });
+    if (ev.tag === "done") W.doneP = ev.payload;
+  }
+  acts.push({ tag: "final" });
+  return acts;
+}
+
+/* ---------- 模式与播放 ---------- */
+function active() { return S.mode === "demo" ? D : W; }
+function stepActive() { if (S.mode === "demo") stepD(); else stepW(); }
+function resetActive() { if (S.mode === "demo") resetD(); else resetW(); }
+
+function restart() {
+  stopPlay();
+  resetActive();
+  stepActive();
+}
+function prevStep() {
+  stopPlay();
+  const P = active();
+  if (P.index <= 0) return;
+  const target = P.index - 1;
+  const actions = P.actions;
+  resetActive();
+  P.actions = actions;
+  for (let i = 0; i < target + 1; i++) stepActive();
+  setStatus("（已回退一步）" + $("#status").textContent);
+}
+function togglePlay() {
+  if (S.playing) { stopPlay(); return; }
+  const P = active();
+  if (P.index >= P.actions.length - 1) return;
+  S.playing = true;
+  $("#play").textContent = "暂停";
+  S.timer = setTimeout(tick, 200);
+}
+function tick() {
+  if (!S.playing) return;
+  const P = active();
+  if (P.index >= P.actions.length - 1) { stopPlay(); return; }
+  stepActive();
+  S.timer = setTimeout(tick, S.mode === "demo" ? 700 : 800);
+}
+function stopPlay() {
+  S.playing = false;
+  $("#play").textContent = "自动播放";
+  if (S.timer !== null) { clearTimeout(S.timer); S.timer = null; }
+}
+
+/* ---------- 切换与启动 ---------- */
+function setMode(mode) {
+  stopPlay();
+  S.mode = mode;
+  $("#tabDemo").classList.toggle("active", mode === "demo");
+  $("#tabWhy").classList.toggle("active", mode === "why");
+  $("#panelDemo").classList.toggle("hidden", mode !== "demo");
+  $("#panelWhy").classList.toggle("hidden", mode !== "why");
+  if (mode === "why" && !W.actions.length) W.actions = planW();
+  restart();
+}
+function loadBoard() {
+  try {
+    const raw = localStorage.getItem("black_white_flip_v1");
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (d && d.rows && d.cols && Array.isArray(d.board) && d.cols <= 8 && d.board.length === d.rows * d.cols) {
+        return { rows: d.rows, cols: d.cols, board: d.board.map((v) => (v ? 1 : 0)), fromGame: true };
+      }
+    }
+  } catch (e) {}
+  return { rows: 5, cols: 6, board: scramble(5, 6), fromGame: false };
+}
+function boot() {
+  const src = loadBoard();
+  S.rows = src.rows; S.cols = src.cols; S.board = src.board;
+  D.fullRank = rankFull(S.rows, S.cols);
+  D.actions = planD();
+  W.actions = planW();
+  setMode("demo");
+  setStatus((src.fromGame ? "已读取你正在玩的那局。" : "演示用的随机棋盘（也可以回游戏玩一局再来）。")
+    + " 点“下一步”或“自动播放”看整个过程。");
+}
+
+$("#tabDemo").addEventListener("click", () => setMode("demo"));
+$("#tabWhy").addEventListener("click", () => setMode("why"));
+$("#next").addEventListener("click", () => { stopPlay(); stepActive(); });
+$("#prev").addEventListener("click", prevStep);
+$("#play").addEventListener("click", togglePlay);
+$("#restart").addEventListener("click", restart);
+$("#reroll").addEventListener("click", () => {
+  stopPlay();
+  const rows = S.rows, cols = S.cols;
+  S.board = scramble(rows, cols);
+  D.fullRank = rankFull(rows, cols);
+  D.actions = planD();
+  W.actions = planW();
+  restart();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); stopPlay(); stepActive(); }
+  else if (e.key === "ArrowLeft") prevStep();
+});
+window.addEventListener("resize", drawBoard);
+
+boot();
+window.__demo = {
+  get mode() { return S.mode; },
+  get index() { return active().index; },
+  get count() { return active().actions.length; },
+  get pMask() { return D.pMask; },
+  get doneP() { return W.doneP; },
+};
+</script>
+</body>
+</html>

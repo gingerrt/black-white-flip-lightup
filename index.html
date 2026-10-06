@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#f2f3f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="color-scheme" content="light">
+<title>黑白反转</title>
+<style>
+:root{
+  --bg:#f2f3f7; --text:#1f2430; --muted:#6b7280;
+  --accent:#3b82f6; --accent2:#2f6dd0; --hint:#f59e0b; --ok:#15803d; --bad:#dc2626;
+  --panel:#ffffff; --cell:#ffffff; --cell-edge:#c9cfda; --cell-black:#20242c;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);display:flex;justify-content:center;
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Segoe UI",sans-serif;
+  overscroll-behavior:none}
+#app{width:100%;max-width:520px;min-height:100%;min-height:100dvh;display:flex;flex-direction:column;
+  padding:calc(10px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom));gap:8px}
+header{display:flex;align-items:baseline;justify-content:space-between}
+h1{font-size:19px;margin:0;letter-spacing:.5px}
+#moves{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+#status{font-size:12.5px;line-height:1.4;color:var(--muted);min-height:35px}
+#status.ok{color:var(--ok)} #status.bad{color:var(--bad)} #status.hint{color:var(--hint)}
+main{flex:1 1 auto;min-height:220px;display:flex;align-items:center;justify-content:center;position:relative}
+#board{display:grid}
+.cell{width:100%;height:100%;padding:0;margin:0;border:1px solid var(--cell-edge);background:var(--cell);
+  border-radius:12%;touch-action:manipulation;cursor:pointer;
+  transition:background-color .12s ease, transform .06s ease, box-shadow .12s ease}
+.cell.black{background:var(--cell-black);border-color:#0e1116}
+.cell.press{transform:scale(.88)}
+.cell.hint{box-shadow:0 0 0 3px var(--hint) inset;border-color:var(--hint)}
+.bar{display:flex;gap:8px}
+.btn{flex:1;border:0;border-radius:12px;padding:12px 6px;font-size:14px;font-family:inherit;
+  background:var(--panel);color:var(--text);box-shadow:0 1px 3px rgba(15,20,30,.08);touch-action:manipulation}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.primary:active{background:var(--accent2)}
+.btn.ghost{flex:0 0 46px;font-weight:700}
+.btn:disabled{opacity:.45}
+a.btn{display:block;text-align:center;text-decoration:none;color:var(--text)}
+a.btn.primary{color:#fff}
+.hidden{display:none !important}
+.win{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(242,243,247,.85);border-radius:16px;backdrop-filter:blur(2px)}
+.win-card{background:#fff;border-radius:16px;padding:18px 22px;text-align:center;box-shadow:0 10px 30px rgba(15,20,30,.16)}
+.win-title{font-size:18px;font-weight:700;margin-bottom:6px}
+.win-sub{font-size:13px;color:var(--muted);margin-bottom:12px}
+.sheet{position:fixed;inset:0;background:rgba(15,18,25,.42);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+.sheet .card{width:100%;max-width:520px;background:#fff;border-radius:18px 18px 0 0;
+  padding:18px 16px calc(16px + env(safe-area-inset-bottom));max-height:86vh;overflow:auto}
+.sheet h2{margin:0 0 8px;font-size:16px}
+.row{display:flex;align-items:center;gap:10px;margin:10px 0}
+.row .label{width:36px;color:var(--muted);font-size:13px}
+.step{width:40px;height:40px;border-radius:11px;border:1px solid #d9dde6;background:#fff;font-size:19px;line-height:1}
+.step:active{background:#eef1f6}
+.val{min-width:36px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+.presets{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
+.chip{border:1px solid #d9dde6;background:#fff;border-radius:999px;padding:8px 13px;font-size:13px;color:inherit}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.wide{width:100%;margin-top:14px}
+.help p{font-size:13.5px;line-height:1.65;color:#333a46;margin:8px 0}
+.help b{color:var(--text)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>黑白反转</h1>
+    <div id="moves">步数 0</div>
+  </header>
+  <div id="status">点击方块翻转十字，全部变白即通关</div>
+  <main id="stage">
+    <div id="board"></div>
+    <div id="win" class="win hidden">
+      <div class="win-card">
+        <div class="win-title">🎉 全部变白！</div>
+        <div id="winText" class="win-sub"></div>
+        <button id="winAgain" class="btn primary">再来一局</button>
+      </div>
+    </div>
+  </main>
+  <nav id="playBar" class="bar">
+    <button id="btnNew" class="btn primary">新游戏</button>
+    <button id="btnUndo" class="btn">撤销</button>
+    <button id="btnHint" class="btn">提示</button>
+    <button id="btnEdit" class="btn">自定义</button>
+    <button id="btnHelp" class="btn ghost">?</button>
+  </nav>
+  <nav id="editBar" class="bar hidden">
+    <button id="btnStart" class="btn primary">开始游戏</button>
+    <button id="btnClear" class="btn">清空</button>
+    <button id="btnRandom" class="btn">随机</button>
+    <button id="btnFix" class="btn">自动修正</button>
+    <button id="btnBack" class="btn ghost">返回</button>
+  </nav>
+</div>
+
+<div id="sheetNew" class="sheet hidden">
+  <div class="card">
+    <h2>新游戏 / 棋盘大小</h2>
+    <div class="presets" id="presets"></div>
+    <div class="row"><span class="label">行</span>
+      <button class="step" data-t="rows" data-d="-1">−</button>
+      <span class="val" id="rowsVal">5</span>
+      <button class="step" data-t="rows" data-d="1">+</button>
+      <span class="label" style="margin-left:10px">列</span>
+      <button class="step" data-t="cols" data-d="-1">−</button>
+      <span class="val" id="colsVal">6</span>
+      <button class="step" data-t="cols" data-d="1">+</button>
+    </div>
+    <button id="newApply" class="btn primary wide">开始新局</button>
+    <button id="newCancel" class="btn wide" style="margin-top:8px">取消</button>
+  </div>
+</div>
+
+<div id="sheetHelp" class="sheet hidden">
+  <div class="card help">
+    <h2>怎么玩</h2>
+    <p><b>规则</b>：点一个方块，它和上下左右相邻的方块一起反色（白变黑、黑变白）。把所有方块变回白色就赢。角上的方块影响 3 格，边上 4 格，中间 5 格。</p>
+    <p><b>开局</b>：每局的黑块都是从全白开始“随机点击若干次”生成的，所以一定有解，中途也不会走进死局。</p>
+    <p><b>追白法</b>：第一行先不点，从第二行开始，看到上一行哪格是黑的，就点它正下方那格，一行行往下推；推到最后一行如果全白了就赢了，否则换一种第一行的点法重来。</p>
+    <p><b>自定义</b>：点“自定义”可以自己摆黑块，界面会实时告诉你能不能解，不能解就点“自动修正”。</p>
+    <p style="color:#6b7280">提示：在手机浏览器里选“添加到主屏幕”，打开就像一个小 App。电脑版还带高斯消元和追白法的逐步演示。</p>
+    <a class="btn wide" href="gauss_demo.html" style="margin-top:14px">教学 1：高斯消元演示</a>
+    <a class="btn wide" href="chase_demo.html" style="margin-top:8px">教学 2：追白法 + 原理讲解</a>
+    <button id="helpClose" class="btn primary wide">知道了</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+
+/* ---------------- 状态 ---------------- */
+const state = {
+  rows: 5, cols: 6,
+  board: [],
+  moves: 0,
+  history: [],
+  won: false,
+  mode: "play",
+  hintIndex: null,
+  snapshot: null,
+};
+let pendingRows = 5, pendingCols = 6;
+
+/* ---------------- 基础操作 ---------------- */
+function pressOn(board, rows, cols, i) {
+  const r = Math.floor(i / cols), c = i % cols;
+  const hit = (rr, cc) => { board[rr * cols + cc] ^= 1; };
+  hit(r, c);
+  if (r > 0) hit(r - 1, c);
+  if (r < rows - 1) hit(r + 1, c);
+  if (c > 0) hit(r, c - 1);
+  if (c < cols - 1) hit(r, c + 1);
+}
+function hasBlack() { return state.board.some((v) => v); }
+function boardMask() {
+  let m = 0n;
+  for (let i = 0; i < state.board.length; i++) if (state.board[i]) m |= 1n << BigInt(i);
+  return m;
+}
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+function scramble(rows, cols) {
+  const board = new Array(rows * cols).fill(0);
+  const cells = shuffle([...Array(rows * cols).keys()]);
+  const count = Math.max(4, Math.round(rows * cols * 0.4));
+  for (const i of cells.slice(0, count)) pressOn(board, rows, cols, i);
+  if (!board.some((v) => v)) {
+    pressOn(board, rows, cols, Math.floor(Math.random() * board.length));
+  }
+  return board;
+}
+
+/* ---------------- GF(2) 求解（BigInt 位运算） ---------------- */
+const eqCache = new Map();
+const basisCache = new Map();
+
+function equationRows(rows, cols) {
+  const key = rows + "x" + cols;
+  if (eqCache.has(key)) return eqCache.get(key);
+  const list = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let m = 0n;
+      const add = (rr, cc) => { m |= 1n << BigInt(rr * cols + cc); };
+      add(r, c);
+      if (r > 0) add(r - 1, c);
+      if (r < rows - 1) add(r + 1, c);
+      if (c > 0) add(r, c - 1);
+      if (c < cols - 1) add(r, c + 1);
+      list.push(m);
+    }
+  }
+  eqCache.set(key, list);
+  return list;
+}
+
+function gaussSolve(input, n) {
+  const data = input.slice();
+  let pivotRow = 0;
+  const pivots = [];
+  for (let col = 0; col < n; col++) {
+    let pick = -1;
+    for (let i = pivotRow; i < data.length; i++) {
+      if ((data[i] >> BigInt(col)) & 1n) { pick = i; break; }
+    }
+    if (pick < 0) continue;
+    [data[pivotRow], data[pick]] = [data[pick], data[pivotRow]];
+    for (let i = 0; i < data.length; i++) {
+      if (i !== pivotRow && ((data[i] >> BigInt(col)) & 1n)) data[i] ^= data[pivotRow];
+    }
+    pivots.push([pivotRow, col]);
+    pivotRow++;
+  }
+  for (let i = pivotRow; i < data.length; i++) {
+    if (data[i] === (1n << BigInt(n))) return null;
+  }
+  let sol = 0n;
+  for (const [row, col] of pivots) {
+    if ((data[row] >> BigInt(n)) & 1n) sol |= 1n << BigInt(col);
+  }
+  return sol;
+}
+
+function solveCurrent() {
+  const n = state.rows * state.cols;
+  const base = equationRows(state.rows, state.cols);
+  const rhs = 1n << BigInt(n);
+  const eqs = base.map((m, i) => (state.board[i] ? (m | rhs) : m));
+  return gaussSolve(eqs, n);
+}
+
+function parityBasis(rows, cols) {
+  const key = rows + "x" + cols;
+  if (basisCache.has(key)) return basisCache.get(key);
+  const n = rows * cols;
+  const data = equationRows(rows, cols).map((m, i) => [m, 1n << BigInt(i)]);
+  let rank = 0;
+  for (let col = 0; col < n; col++) {
+    let pick = -1;
+    for (let i = rank; i < data.length; i++) {
+      if ((data[i][0] >> BigInt(col)) & 1n) { pick = i; break; }
+    }
+    if (pick < 0) continue;
+    [data[rank], data[pick]] = [data[pick], data[rank]];
+    for (let i = 0; i < data.length; i++) {
+      if (i !== rank && ((data[i][0] >> BigInt(col)) & 1n)) {
+        data[i][0] ^= data[rank][0];
+        data[i][1] ^= data[rank][1];
+      }
+    }
+    rank++;
+  }
+  const basis = data.filter(([a]) => a === 0n).map(([, e]) => e);
+  basisCache.set(key, basis);
+  return basis;
+}
+
+function syndromeOf(basis, mask) {
+  let s = 0n;
+  for (let j = 0; j < basis.length; j++) {
+    let x = basis[j] & mask, parity = 0;
+    while (x) { x &= x - 1n; parity ^= 1; }
+    if (parity) s |= 1n << BigInt(j);
+  }
+  return s;
+}
+
+function columnSyndromes(basis, n) {
+  const out = new Array(n).fill(0n);
+  for (let j = 0; j < basis.length; j++) {
+    let x = basis[j];
+    while (x) {
+      const low = x & -x;
+      let idx = 0, y = low;
+      while (y > 1n) { y >>= 1n; idx++; }
+      out[idx] |= 1n << BigInt(j);
+      x ^= low;
+    }
+  }
+  return out;
+}
+
+function syndromeFix(basis, colsSyn, target) {
+  if (target === 0n) return 0n;
+  const cells = [];
+  const seen = new Set();
+  for (let i = 0; i < colsSyn.length; i++) {
+    const k = colsSyn[i].toString();
+    if (!seen.has(k)) { seen.add(k); cells.push([i, colsSyn[i]]); }
+  }
+  if (basis.length <= 12) {
+    const prev = new Map();
+    prev.set(0n, null);
+    const queue = [0n];
+    while (queue.length) {
+      const s = queue.shift();
+      if (s === target) {
+        let mask = 0n, cur = s;
+        while (cur !== 0n) {
+          const p = prev.get(cur);
+          mask |= 1n << BigInt(p.idx);
+          cur = p.prev;
+        }
+        return mask;
+      }
+      for (const [i, v] of cells) {
+        const ns = s ^ v;
+        if (!prev.has(ns)) { prev.set(ns, { prev: s, idx: i }); queue.push(ns); }
+      }
+    }
+    return null;
+  }
+  for (const [i, v] of cells) if (v === target) return 1n << BigInt(i);
+  const pairs = new Map();
+  for (let a = 0; a < cells.length; a++) {
+    for (let b = a + 1; b < cells.length; b++) {
+      const s = cells[a][1] ^ cells[b][1];
+      if (!pairs.has(s)) {
+        pairs.set(s, (1n << BigInt(cells[a][0])) | (1n << BigInt(cells[b][0])));
+      }
+    }
+  }
+  for (const [s, mask] of pairs) if (s === target) return mask;
+  for (const [i, v] of cells) {
+    const m = pairs.get(target ^ v);
+    if (m !== undefined) return m | (1n << BigInt(i));
+  }
+  return null;
+}
+
+function isSolvable() {
+  return syndromeOf(parityBasis(state.rows, state.cols), boardMask()) === 0n;
+}
+
+/* ---------------- 渲染 ---------------- */
+function layout() {
+  const stage = $("#stage");
+  const boardEl = $("#board");
+  const availW = Math.max(180, stage.clientWidth - 4);
+  const availH = Math.max(180, stage.clientHeight - 4);
+  const gap = Math.max(2, Math.min(9, Math.round(availW * 0.012)));
+  const cs = Math.max(8, Math.floor(Math.min(
+    (availW - (state.cols - 1) * gap) / state.cols,
+    (availH - (state.rows - 1) * gap) / state.rows)));
+  boardEl.style.gridTemplateColumns = `repeat(${state.cols}, ${cs}px)`;
+  boardEl.style.gridAutoRows = `${cs}px`;
+  boardEl.style.gap = `${gap}px`;
+}
+
+function renderBoard(rebuild) {
+  const el = $("#board");
+  if (rebuild || el.childElementCount !== state.board.length) {
+    el.innerHTML = "";
+    for (let i = 0; i < state.board.length; i++) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "cell";
+      b.dataset.i = String(i);
+      el.appendChild(b);
+    }
+  }
+  const kids = el.children;
+  for (let i = 0; i < state.board.length; i++) {
+    const cell = kids[i];
+    cell.classList.toggle("black", !!state.board[i]);
+    cell.classList.toggle("hint", state.hintIndex === i);
+  }
+  layout();
+}
+
+function setStatus(text, cls) {
+  const el = $("#status");
+  el.textContent = text;
+  el.className = cls || "";
+}
+
+function updateHud() {
+  if (state.mode === "edit") {
+    const black = state.board.reduce((a, b) => a + b, 0);
+    $("#moves").textContent = "黑块 " + black;
+  } else {
+    $("#moves").textContent = "步数 " + state.moves;
+  }
+}
+
+function updateEditStatus(prefix) {
+  const black = state.board.reduce((a, b) => a + b, 0);
+  const head = prefix ? prefix + " " : "";
+  if (black === 0) {
+    setStatus(head + "编辑中（0 个黑块）：点格子摆黑块，或点“随机”。");
+  } else if (isSolvable()) {
+    setStatus(head + `编辑中（${black} 个黑块）：布局可解 ✓ 点“开始游戏”开局。`, "ok");
+  } else {
+    setStatus(head + `编辑中（${black} 个黑块）：该布局无解 ✗ 请调整、自动修正或随机。`, "bad");
+  }
+}
+
+function switchBars() {
+  const editing = state.mode === "edit";
+  $("#playBar").classList.toggle("hidden", editing);
+  $("#editBar").classList.toggle("hidden", !editing);
+}
+
+/* ---------------- 游戏流程 ---------------- */
+function newGame(rows, cols) {
+  state.rows = Math.max(1, Math.min(25, rows | 0));
+  state.cols = Math.max(1, Math.min(25, cols | 0));
+  state.board = scramble(state.rows, state.cols);
+  state.history = [];
+  state.moves = 0;
+  state.won = false;
+  state.mode = "play";
+  state.hintIndex = null;
+  state.snapshot = null;
+  hideWin();
+  switchBars();
+  renderBoard(true);
+  updateHud();
+  setStatus("开局：点击方块翻转十字，全部变白即通关。");
+  save();
+}
+
+function play(i, el) {
+  if (state.won) return;
+  pressOn(state.board, state.rows, state.cols, i);
+  state.history.push(i);
+  state.moves = state.history.length;
+  state.hintIndex = null;
+  if (el) {
+    el.classList.add("press");
+    setTimeout(() => el.classList.remove("press"), 90);
+  }
+  renderBoard();
+  updateHud();
+  save();
+  if (!hasBlack()) doWin();
+}
+
+function doWin() {
+  state.won = true;
+  renderBoard();
+  $("#winText").textContent = `一共用了 ${state.moves} 步`;
+  $("#win").classList.remove("hidden");
+  setStatus("🎉 全部变白！点“再来一局”继续。", "ok");
+  save();
+}
+
+function hideWin() { $("#win").classList.add("hidden"); }
+
+function undo() {
+  if (state.mode === "edit") return;
+  if (!state.history.length) { setStatus("没有可撤销的步骤。"); return; }
+  const i = state.history.pop();
+  pressOn(state.board, state.rows, state.cols, i);
+  state.moves = state.history.length;
+  state.won = false;
+  state.hintIndex = null;
+  hideWin();
+  renderBoard();
+  updateHud();
+  save();
+  setStatus(`已撤销一步，当前 ${state.moves} 步。`);
+}
+
+function hint() {
+  if (state.won) { setStatus("已经全部变白啦。", "ok"); return; }
+  const sol = solveCurrent();
+  if (sol === null) { setStatus("当前局面无解（理论上不会出现）。", "bad"); return; }
+  if (sol === 0n) { setStatus("棋盘已经全白。", "ok"); return; }
+  let low = sol & -sol, idx = 0;
+  while (low > 1n) { low >>= 1n; idx++; }
+  state.hintIndex = idx;
+  let rest = 0, x = sol;
+  while (x) { x &= x - 1n; rest++; }
+  renderBoard();
+  setStatus(`提示：橙色格子是可行的一步（这个走法约 ${rest} 步，不一定最少）。`, "hint");
+}
+
+/* ---------------- 自定义黑块 ---------------- */
+function enterEdit() {
+  state.snapshot = {
+    board: state.board.slice(),
+    history: state.history.slice(),
+    moves: state.moves,
+    won: state.won,
+  };
+  state.mode = "edit";
+  state.hintIndex = null;
+  hideWin();
+  switchBars();
+  renderBoard();
+  updateHud();
+  updateEditStatus();
+}
+
+function exitEdit() {
+  if (state.snapshot) {
+    state.board = state.snapshot.board.slice();
+    state.history = state.snapshot.history.slice();
+    state.moves = state.snapshot.moves;
+    state.won = state.snapshot.won;
+  }
+  state.snapshot = null;
+  state.mode = "play";
+  state.hintIndex = null;
+  switchBars();
+  renderBoard();
+  updateHud();
+  if (state.won) doWin(); else setStatus("已返回对局。");
+}
+
+function toggleCell(i) {
+  state.board[i] ^= 1;
+  renderBoard();
+  updateHud();
+  updateEditStatus();
+}
+
+function clearBoard() {
+  state.board = new Array(state.rows * state.cols).fill(0);
+  renderBoard();
+  updateHud();
+  updateEditStatus();
+}
+
+function randomEdit() {
+  state.board = scramble(state.rows, state.cols);
+  renderBoard();
+  updateHud();
+  updateEditStatus("已生成随机可解布局：");
+}
+
+function autoFix() {
+  const basis = parityBasis(state.rows, state.cols);
+  const mask = boardMask();
+  const syn = syndromeOf(basis, mask);
+  if (syn === 0n) { updateEditStatus(); return; }
+  const colsSyn = columnSyndromes(basis, state.rows * state.cols);
+  const fix = syndromeFix(basis, colsSyn, syn);
+  if (fix === null) {
+    setStatus("没找到小改动（≤3 格）的修正方案，请手动调整或点“随机”。", "bad");
+    return;
+  }
+  let changed = 0;
+  for (let i = 0; i < state.board.length; i++) {
+    if ((fix >> BigInt(i)) & 1n) { state.board[i] ^= 1; changed++; }
+  }
+  let note = "";
+  if (!hasBlack()) {
+    pressOn(state.board, state.rows, state.cols, Math.floor(Math.random() * state.board.length));
+    note = "；修正后是全白，已补一次随机点击";
+  }
+  renderBoard();
+  updateHud();
+  updateEditStatus(`已修正 ${changed} 处${note}：`);
+}
+
+function startCustom() {
+  const black = state.board.reduce((a, b) => a + b, 0);
+  if (black === 0) { setStatus("全白开局没法玩：先摆几个黑块，或点“随机”。", "bad"); return; }
+  if (!isSolvable()) { setStatus("这个布局无解：请调整、点“自动修正”，或点“随机”。", "bad"); return; }
+  state.mode = "play";
+  state.snapshot = null;
+  state.history = [];
+  state.moves = 0;
+  state.won = false;
+  state.hintIndex = null;
+  switchBars();
+  renderBoard();
+  updateHud();
+  setStatus(`自定义开局（${black} 个黑块，保证有解）：全部变白即通关。`, "ok");
+  save();
+}
+
+/* ---------------- 存档 ---------------- */
+const SAVE_KEY = "black_white_flip_v1";
+function save() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      rows: state.rows, cols: state.cols, board: state.board,
+      history: state.history, moves: state.moves, won: state.won,
+    }));
+  } catch (e) {}
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    if (!d || !d.rows || !d.cols || !Array.isArray(d.board) ||
+        d.board.length !== d.rows * d.cols) return false;
+    state.rows = d.rows; state.cols = d.cols;
+    state.board = d.board.map((v) => (v ? 1 : 0));
+    state.history = Array.isArray(d.history) ? d.history : [];
+    state.moves = d.moves | 0;
+    state.won = !!d.won;
+    return true;
+  } catch (e) { return false; }
+}
+
+/* ---------------- 事件绑定 ---------------- */
+$("#board").addEventListener("click", (e) => {
+  const cell = e.target.closest(".cell");
+  if (!cell) return;
+  const i = Number(cell.dataset.i);
+  if (state.mode === "edit") toggleCell(i);
+  else play(i, cell);
+});
+$("#btnUndo").addEventListener("click", undo);
+$("#btnHint").addEventListener("click", hint);
+$("#btnEdit").addEventListener("click", enterEdit);
+$("#btnStart").addEventListener("click", startCustom);
+$("#btnClear").addEventListener("click", clearBoard);
+$("#btnRandom").addEventListener("click", randomEdit);
+$("#btnFix").addEventListener("click", autoFix);
+$("#btnBack").addEventListener("click", exitEdit);
+
+function openSheet(id) { $(id).classList.remove("hidden"); }
+function closeSheet(id) { $(id).classList.add("hidden"); }
+
+function renderSizeSheet() {
+  $("#rowsVal").textContent = pendingRows;
+  $("#colsVal").textContent = pendingCols;
+  const presets = [[4, 4], [5, 5], [5, 6], [6, 6], [8, 8]];
+  const box = $("#presets");
+  box.innerHTML = "";
+  for (const [r, c] of presets) {
+    const b = document.createElement("button");
+    b.className = "chip" + (r === pendingRows && c === pendingCols ? " active" : "");
+    b.textContent = `${r}×${c}`;
+    b.addEventListener("click", () => {
+      pendingRows = r; pendingCols = c;
+      renderSizeSheet();
+    });
+    box.appendChild(b);
+  }
+}
+
+$("#btnNew").addEventListener("click", () => {
+  pendingRows = state.rows; pendingCols = state.cols;
+  renderSizeSheet();
+  openSheet("#sheetNew");
+});
+$("#newCancel").addEventListener("click", () => closeSheet("#sheetNew"));
+$("#newApply").addEventListener("click", () => {
+  closeSheet("#sheetNew");
+  newGame(pendingRows, pendingCols);
+});
+document.querySelectorAll(".step").forEach((b) => {
+  b.addEventListener("click", () => {
+    const t = b.dataset.t, d = Number(b.dataset.d);
+    if (t === "rows") pendingRows = Math.max(1, Math.min(25, pendingRows + d));
+    else pendingCols = Math.max(1, Math.min(25, pendingCols + d));
+    renderSizeSheet();
+  });
+});
+
+$("#btnHelp").addEventListener("click", () => openSheet("#sheetHelp"));
+$("#helpClose").addEventListener("click", () => closeSheet("#sheetHelp"));
+$("#winAgain").addEventListener("click", () => newGame(state.rows, state.cols));
+
+document.querySelectorAll(".sheet").forEach((el) => {
+  el.addEventListener("click", (e) => { if (e.target === el) el.classList.add("hidden"); });
+});
+window.addEventListener("resize", layout);
+window.addEventListener("orientationchange", () => setTimeout(layout, 200));
+
+/* ---------------- 启动 ---------------- */
+if (!load()) newGame(state.rows, state.cols);
+else {
+  switchBars();
+  renderBoard(true);
+  updateHud();
+  if (state.won) doWin();
+  else setStatus("接着上一局：点击方块翻转十字，全部变白即通关。");
+}
+
+/* 给自动化测试用的小接口（对使用没有影响） */
+window.__game = {
+  state,
+  press: play,
+  solve: solveCurrent,
+  isSolvable,
+  autoFix,
+  newGame,
+};
+</script>
+</body>
+</html>
