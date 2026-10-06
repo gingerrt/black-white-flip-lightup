@@ -120,7 +120,7 @@ a.btn.primary{color:#fff}
 
 <div id="sheetHelp" class="sheet hidden">
   <div class="card help">
-    <h2>怎么玩</h2>
+    <h2>游戏规则</h2>
     <p><b>规则</b>：点一个方块，它和上下左右相邻的方块一起反色（白变黑、黑变白）。把所有方块变回白色就赢。角上的方块影响 3 格，边上 4 格，中间 5 格。</p>
     <p><b>开局</b>：每局的黑块都是从全白开始“随机点击若干次”生成的，所以一定有解，中途也不会走进死局。</p>
     <p><b>追白法</b>：第一行先不点，从第二行开始，看到上一行哪格是黑的，就点它正下方那格，一行行往下推；推到最后一行如果全白了就赢了，否则换一种第一行的点法重来。</p>
@@ -129,7 +129,7 @@ a.btn.primary{color:#fff}
     <a class="btn wide" href="gauss_demo.html" style="margin-top:14px">教学 1：高斯消元演示</a>
     <a class="btn wide" href="chase_demo.html" style="margin-top:8px">教学 2：追白法 + 原理讲解</a>
     <a class="btn wide" href="sizes.html" style="margin-top:8px">教学 3：哪些尺寸会无解</a>
-    <button id="helpClose" class="btn primary wide">知道了</button>
+    <button id="helpClose" class="btn primary wide">确认，开始游戏</button>
   </div>
 </div>
 
@@ -710,6 +710,9 @@ window.__game = {
   autoFix,
   newGame,
 };
+
+/* 一进网页先弹规则，点“确认，开始游戏”再开始（“?”按钮随时可以再打开） */
+openSheet("#sheetHelp");
 </script>
 </body>
 </html>
