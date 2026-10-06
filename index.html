@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="color-scheme" content="light">
-<title>黑白反转 Lightup</title>
+<title>黑白反转</title>
 <style>
 :root{
   --bg:#f2f3f7; --text:#1f2430; --muted:#6b7280;
@@ -70,7 +70,7 @@ a.btn.primary{color:#fff}
 <body>
 <div id="app">
   <header>
-    <h1>黑白反转 Lightup</h1>
+    <h1>黑白反转</h1>
     <div id="moves">步数 0</div>
   </header>
   <div id="status">点击方块翻转十字，全部变白即通关</div>
@@ -106,11 +106,11 @@ a.btn.primary{color:#fff}
     <div class="presets" id="presets"></div>
     <div class="row"><span class="label">行</span>
       <button class="step" data-t="rows" data-d="-1">−</button>
-      <span class="val" id="rowsVal">5</span>
+      <span class="val" id="rowsVal">3</span>
       <button class="step" data-t="rows" data-d="1">+</button>
       <span class="label" style="margin-left:10px">列</span>
       <button class="step" data-t="cols" data-d="-1">−</button>
-      <span class="val" id="colsVal">6</span>
+      <span class="val" id="colsVal">3</span>
       <button class="step" data-t="cols" data-d="1">+</button>
     </div>
     <button id="newApply" class="btn primary wide">开始新局</button>
@@ -138,7 +138,7 @@ const $ = (s) => document.querySelector(s);
 
 /* ---------------- 状态 ---------------- */
 const state = {
-  rows: 5, cols: 6,
+  rows: 3, cols: 3,
   board: [],
   moves: 0,
   history: [],
@@ -147,7 +147,7 @@ const state = {
   hintIndex: null,
   snapshot: null,
 };
-let pendingRows = 5, pendingCols = 6;
+let pendingRows = 3, pendingCols = 3;
 
 /* ---------------- 基础操作 ---------------- */
 function pressOn(board, rows, cols, i) {
@@ -634,7 +634,7 @@ function closeSheet(id) { $(id).classList.add("hidden"); }
 function renderSizeSheet() {
   $("#rowsVal").textContent = pendingRows;
   $("#colsVal").textContent = pendingCols;
-  const presets = [[4, 4], [5, 5], [5, 6], [6, 6], [8, 8]];
+  const presets = [[3, 3], [4, 4], [5, 5], [5, 6], [6, 6], [8, 8]];
   const box = $("#presets");
   box.innerHTML = "";
   for (const [r, c] of presets) {
