@@ -5,7 +5,8 @@
 - 棋盘是自定义大小的矩形（默认 3 行 3 列，也可以指定 5 行 6 列等），开局全白，随机翻出一些黑块。
 - 左键点击任意方块：该方块和它上下左右的相邻方块一起反色（白变黑、黑变白）。
 - 把所有方块恢复成白色即通关。
-- 也可以进入“自定义黑块”编辑模式自己摆开局：实时检测布局是否可解，可一键自动修正。
+- 也可以进入“自定义黑块”编辑模式自己摆开局：实时检测布局是否可解；无解时会建议修正，
+  但也可以直接开始，演示窗口会说明为什么无解。
 
 黑块由“从全白棋盘随机点击若干次”生成，所以每一局一定有解：
 把你点过的方块按相同顺序再点一遍就能还原；中途随便点也不会走进死局。
@@ -18,7 +19,7 @@
     python black_white_flip.py --selftest   # 只跑逻辑自检，不打开窗口
 
 窗口内快捷键：R 新一局 / 编辑时随机，U / Z 撤销，H 提示，E 自定义黑块，
-C 清空，F 自动修正，G 高斯消元演示，T 追白法演示，Esc 返回，Enter 开始。
+C 清空，F 建议修正，G 高斯消元演示，T 追白法演示，Esc 返回，Enter 开始。
 """
 
 from __future__ import annotations
@@ -499,7 +500,7 @@ def selftest():
             check(affected_count(rows, cols, 0, cols // 2) == 4, "边缘块应该影响 4 格")
             check(affected_count(rows, cols, 1, 1) == 5, "内部块应该影响 5 格")
 
-    # 自定义布局模块：可解性判定与自动修正
+    # 自定义布局模块：可解性判定与建议修正
     for _ in range(60):
         rows, cols = rng.randint(2, 6), rng.randint(2, 6)
         basis, cols_syn = syndrome_tools(rows, cols)
@@ -513,7 +514,7 @@ def selftest():
               f"{rows}x{cols}: 综合征判定和求解结果不一致")
         if syndrome != 0:
             fix = syndrome_fix(basis, cols_syn, syndrome)
-            check(fix is not None, f"{rows}x{cols}: 自动修正没找到方案")
+            check(fix is not None, f"{rows}x{cols}: 建议修正没找到方案")
             if fix is not None:
                 fixed = [row[:] for row in layout]
                 for i in range(rows * cols):
@@ -661,7 +662,7 @@ class GameApp:
         self._button(self.edit_buttons, "清空 (C)", self.clear_board).pack(side="left", padx=(8, 0))
         self._button(self.edit_buttons, "随机 (R)", self.random_edit_board).pack(
             side="left", padx=(8, 0))
-        self._button(self.edit_buttons, "自动修正 (F)", self.auto_fix).pack(
+        self._button(self.edit_buttons, "建议修正 (F)", self.auto_fix).pack(
             side="left", padx=(8, 0))
         self._button(self.edit_buttons, "返回 (Esc)", self.exit_edit).pack(
             side="left", padx=(8, 0))
@@ -817,9 +818,7 @@ class GameApp:
             self._set_status("全白开局没法玩：先点几个格子摆黑块，或点“随机”。", ERROR_COLOR)
             return
         basis, _ = syndrome_tools(self.rows, self.cols)
-        if mask_syndrome(basis, board_mask(self.board, self.cols)) != 0:
-            self._set_status("这个布局无解：请调整黑块、点“自动修正”，或点“随机”。", ERROR_COLOR)
-            return
+        solvable = mask_syndrome(basis, board_mask(self.board, self.cols)) == 0
         self.mode = "play"
         self._snapshot = None
         self.edit_history = []
@@ -830,7 +829,14 @@ class GameApp:
         self._refresh_mode()
         self._render()
         self._update_moves()
-        self._set_status(f"自定义开局（{black} 个黑块，保证有解）：点击方块翻转十字，全部变白即通关。")
+        if solvable:
+            self._set_status(
+                f"自定义开局（{black} 个黑块，保证有解）：点击方块翻转十字，全部变白即通关。")
+        else:
+            self._set_status(
+                f"自定义开局（{black} 个黑块）：这个布局无解——不存在任何能全白的点法。"
+                "可以随便试；想看“为什么无解”，按 G（高斯消元演示）或 T（追白法演示）。",
+                ERROR_COLOR)
 
     def toggle_cell(self, r, c):
         self.board[r][c] ^= 1
@@ -897,7 +903,8 @@ class GameApp:
             self._set_status(f"{head}编辑中（0 个黑块）：点格子摆黑块，或点“随机”。")
         else:
             self._set_status(
-                f"{head}编辑中（{black} 个黑块）：该布局无解，请调整、自动修正或随机。", ERROR_COLOR)
+                f"{head}编辑中（{black} 个黑块）：该布局无解——建议修正"
+                "（点“建议修正”自动改成可解），也可以直接开始看演示。", ERROR_COLOR)
 
     def _refresh_mode(self):
         editing = self.mode == "edit"
@@ -1122,7 +1129,9 @@ class GameApp:
             return
         solution = solve(self.board)
         if solution is None:
-            self._set_status("当前局面无解（正常情况下不会出现）。", ERROR_COLOR)
+            self._set_status(
+                "这个局面无解：不存在任何点击组合能把它全部变白。"
+                "按 G 或 T 看演示，会走到 0 = 1 的矛盾行，说明为什么无解。", ERROR_COLOR)
             return
         if solution == 0:
             self._set_status("棋盘已经全白。", WIN_COLOR)
@@ -1131,9 +1140,19 @@ class GameApp:
         self.hint_cell = divmod(index, self.cols)
         self._render_marks()
         steps = solution.bit_count()
-        self._set_status(
-            f"提示：橙色方框是可行的一步，完整走法约 {steps} 步（不一定最少）。",
-            HINT_COLOR)
+        basis, _ = syndrome_tools(self.rows, self.cols)
+        if basis and len(basis) <= 12:
+            self._set_status(
+                f"提示：这个局面有多组解（共 {2 ** len(basis)} 组），"
+                f"橙色方框是其中一组解的下一步（这一组约 {steps} 步）。", HINT_COLOR)
+        elif basis:
+            self._set_status(
+                f"提示：这个局面有多组解，橙色方框是其中一组解的下一步"
+                f"（这一组约 {steps} 步）。", HINT_COLOR)
+        else:
+            self._set_status(
+                f"提示：橙色方框是可行的一步，完整走法约 {steps} 步（不一定最少）。",
+                HINT_COLOR)
 
     def _update_moves(self):
         if self.mode == "edit":
@@ -1417,13 +1436,17 @@ class GaussDemo:
         elif tag == "free":
             (col,) = payload
             self.focus = {"col": col}
-            text = f"第 {col + 1} 列整列都是 0，没有主元：这个未知数取 0（自由变量），不影响成败。"
+            text = (f"第 {col + 1} 列整列都是 0，没有主元：第 {col + 1} 格是一个“自由变量”——"
+                    "点或不点都可以，说明这个局面有多组解（点法不唯一）。"
+                    "演示里默认取 0（不点这一格）。")
         elif tag == "consistent":
             text = "消元结束，没有出现 0 = 1 的矛盾行：当前局面有解。现在从每个主元行直接读出未知数。"
         elif tag == "contradiction":
             (row,) = payload
             self.focus = {"bad": row}
-            text = f"第 {row + 1} 行剩下 0 = 1：无解！这就是“这个摆法不可能全白”的数学原因。"
+            text = (f"第 {row + 1} 行剩下 0 = 1：无解！这说明“每个格子都要变白”的要求互相矛盾，"
+                    "任何点法都不可能同时满足。演示到此结束，没有解可以应用"
+                    "（回游戏里可以点“建议修正”一键改成可解布局）。")
         elif tag == "solve":
             col, row, bit = payload
             r, c = divmod(col, self.cols)
@@ -1434,7 +1457,18 @@ class GaussDemo:
             self.solution = mask
             clicks = [divmod(i, self.cols) for i in range(self.n) if (mask >> i) & 1]
             spots = "、".join(f"({r + 1},{c + 1})" for r, c in clicks) or "无（已经全白）"
-            text = f"解出来了：一共点 {len(clicks)} 个格子 → {spots}。点“应用到棋盘”看看效果。"
+            free_count = sum(1 for event, _snap in self.events if event[0] == "free")
+            if not free_count:
+                note = ""
+            elif free_count <= 10:
+                note = (f"注意：这个局面有多组解——自由变量有 {free_count} 个，"
+                        f"共 2^{free_count} = {2 ** free_count} 组可行点法"
+                        "（演示取的是自由变量全为 0 的那一组）。")
+            else:
+                note = ("注意：这个局面有多组解（自由变量很多），"
+                        "演示取的是自由变量全为 0 的那一组。")
+            text = (f"解出来了：一共点 {len(clicks)} 个格子 → {spots}。{note}"
+                    "点“应用到棋盘”看看效果。")
             self.solution_var.set(f"需要点击：{spots}\n总步数：{len(clicks)}")
             self.apply_button.config(state="normal")
         self.info_var.set(prefix + text)
@@ -1771,7 +1805,8 @@ class ChaseDemo:
                         "也就是说：第一遍根本不用猜，最后一行已经把答案写好了。")
             else:
                 text = (f"这个尺寸的 M 不可逆，解 {self.cols}×{self.cols} 的小方程组 M·p = r，"
-                        f"得到一个可行点法 p = {self._bits(payload)}（可能还有别的解）。")
+                        f"得到一个可行点法 p = {self._bits(payload)}。"
+                        "说明这个局面有多组解（点法不唯一）；演示取的是自由变量全为 0 的那一组。")
         elif tag == "reset":
             self.board = [row[:] for row in self.original]
             self.markers = {}
@@ -1787,7 +1822,8 @@ class ChaseDemo:
                 text = "第二遍：第一行不用点任何格子，直接从上往下追白。"
         elif tag == "dead":
             text = ("最后一行残留 r 超出了 M 的表达范围：这个局面无解——"
-                    "不存在任何第一行点法能把它变全白。")
+                    "不存在任何第一行点法能把它变全白。演示到此结束"
+                    "（回游戏里可以点“建议修正”一键改成可解布局）。")
         else:  # done
             self.markers = {}
             if has_black(self.board):
@@ -2114,7 +2150,8 @@ class ChaseTheoryDemo:
                     f"（第 {prow + 1} 行），这一列就变成 0，其它列同步更新。")
         if tag == "free":
             (col,) = payload
-            return f"第 {col + 1} 列整列都是 0，没有主元：这个变量取 0（自由变量）。"
+            return (f"第 {col + 1} 列整列都是 0，没有主元：第 {col + 1} 格是自由变量——"
+                    "点或不点都行，说明方程组有多组解。演示里默认取 0（不点）。")
         if tag == "consistent":
             return "消元结束，没有 0 = 1 的矛盾：方程组有解。接着读每个主元行右端的数字。"
         if tag == "contradiction":
@@ -2250,12 +2287,16 @@ class ChaseTheoryDemo:
         else:  # final
             if self.elim_done_p is None:
                 text = ("对这个局面，消元出现了 0 = 1：方程组无解，也就是说不存在任何"
-                        "第一行点法能把它变全白（游戏里的“自动修正”就是处理这种情况）。")
+                        "第一行点法能把它变全白（游戏里的“建议修正”可以一键改成可解布局）。")
             else:
+                free_count = sum(1 for action in self.actions
+                                 if action[0] == "elim" and action[1][0] == "free")
                 text = (f"解得第一行点法 p = {self._bits(self.elim_done_p)}，"
                         "和追白法演示算出来的完全一致。实际玩的时候这张表可以做一次："
                         "把 M 求逆（或每次解一遍小方程组），以后任何局面只要读出 r 代进去，"
-                        "就知道第一行该点哪几格。")
+                        "就知道第一行该点哪几格。"
+                        + (f"注意：这个方程组有多组解（自由变量有 {free_count} 个），"
+                           "演示取的是自由变量全为 0 的一组。" if free_count else ""))
         self.info_var.set(text)
         self._render()
         self._update_panel()
@@ -2390,7 +2431,7 @@ def ui_smoke_test():
     assert app.mode == "edit", "进入编辑模式失败"
     app.clear_board()
     app.toggle_cell(0, 0)
-    app.auto_fix()           # 走一遍自动修正代码路径
+    app.auto_fix()           # 走一遍建议修正代码路径
     app.random_edit_board()  # 随机可解布局
     app.start_custom()
     assert app.mode == "play", "自定义布局开局失败"
@@ -2480,6 +2521,16 @@ def ui_smoke_test():
     assert not chase.walkthrough, "5x5 的响应矩阵不可逆，不应展示唯一反查表"
     assert not has_black(chase.board), "5x5 的可解局面追白法也要能解出"
     chase.close()
+
+    # 无解布局也可以直接开始游戏（修正只是建议）
+    app.new_game(4, 4)
+    app.enter_edit()
+    app.clear_board()
+    app.toggle_cell(0, 0)
+    assert "无解" in app.status_var.get(), "4x4 单黑块应该被判定为无解"
+    app.start_custom()
+    assert app.mode == "play", "无解布局现在也应该可以直接开始"
+    assert "无解" in app.status_var.get(), "开始无解布局后应该提示玩家"
 
     root.update_idletasks()
     root.update()

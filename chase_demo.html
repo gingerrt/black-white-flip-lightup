@@ -273,13 +273,14 @@ function updatePanel() {
     else if (D.pBits.some((b) => b !== undefined && b !== null)) {
       $("#pVal").textContent = D.pBits.map((b) => (b === undefined || b === null ? "？" : b)).join(" ");
     } else $("#pVal").textContent = "？";
-    if (D.residual !== null && D.fullRank) {
+    if (D.residual !== null) {
       $("#sysBox").textContent = equationLines(D.residual).join("\n");
-      $("#fxBox").textContent = fxLines().join("\n");
+      $("#fxBox").textContent = D.fullRank
+        ? fxLines().join("\n")
+        : "这个尺寸的 M 不可逆：同一串 r 可能对应多组第一行点法（有多组解），演示给出的是自由变量全为 0 的那一组。";
     } else {
       $("#sysBox").textContent = "";
-      $("#fxBox").textContent = D.residual !== null && !D.fullRank
-        ? "这个尺寸的 M 不可逆（同一串 r 可能有多个 p），用解方程组的方式给出其中一个解。" : "";
+      $("#fxBox").textContent = "";
     }
   } else {
     $("#mBox").textContent = W.mRows.length
@@ -408,7 +409,9 @@ function stepD() {
   } else if (a.tag === "solve") {
     D.pMask = D.trueP;
     D.markers = { top: [...Array(S.cols).keys()].filter((c) => (Number(D.pMask) >> c) & 1) };
-    text = `第一行点法 p = ${bitsStr(Number(D.pMask), S.cols)}。也就是说：第一遍根本不用猜，最后一行已经把答案写好了。`;
+    text = D.fullRank
+      ? `第一行点法 p = ${bitsStr(Number(D.pMask), S.cols)}。这是唯一的正确选择——第一遍根本不用猜，最后一行已经把答案写好了。`
+      : `第一行点法 p = ${bitsStr(Number(D.pMask), S.cols)}。这只是其中一个可行解：这个尺寸的 M 不可逆，说明有多组解，演示取的是自由变量全为 0 的那一组。`;
   } else if (a.tag === "reset") {
     D.board = S.board.slice(); D.markers = {};
     text = "第一遍只是一次探测：现在把棋盘恢复原样，按算出来的 p 正式解一遍。";
@@ -418,7 +421,7 @@ function stepD() {
     text = cells.length ? `第二遍：第一行先点第 ${cells.join("、")} 格，然后照常往下追白。`
                         : "第二遍：第一行不用点，直接往下追白。";
   } else if (a.tag === "dead") {
-    text = "最后一行残留超出了 M 的范围：这个局面无解——不存在任何第一行点法能救回来。";
+    text = "最后一行残留超出了 M 的范围：不管第一行怎么点，最后一行都清不干净——这个局面无解，不存在任何能全白的点法。演示到此结束（想玩的话，回游戏里点“建议修正”可以一键改成可解布局）。";
   } else if (a.tag === "done") {
     text = D.board.some((v) => v) ? "演示结束时还有黑块（不应该发生）。"
       : `全部变白 ✓ 第二遍一共 ${a.total} 步。整个过程只追了两遍、解了一个 ${S.cols} 元方程组，没有枚举任何东西。`;
@@ -491,15 +494,24 @@ function stepW() {
     if (ev.tag === "pivot") text = `第 ${ev.payload[0] + 1} 行第 ${ev.payload[1] + 1} 列是主元 1：用它做主元行。`;
     else if (ev.tag === "swap") text = `交换第 ${ev.payload[1] + 1} 行和第 ${ev.payload[0] + 1} 行，让主元就位。`;
     else if (ev.tag === "eliminate") text = `第 ${ev.payload[0] + 1} 行第 ${ev.payload[2] + 1} 列是 1：整行异或上主元行（第 ${ev.payload[1] + 1} 行）。`;
-    else if (ev.tag === "free") text = `第 ${ev.payload + 1} 列整列是 0：这个变量取 0。`;
+    else if (ev.tag === "free") text = `第 ${ev.payload + 1} 列整列是 0，没有主元：第 ${ev.payload + 1} 格是自由变量——点或不点都行，说明方程组有多组解。演示里默认取 0（不点）。`;
     else if (ev.tag === "consistent") text = "消元结束，没有 0 = 1 的矛盾：方程组有解。下面读每个主元行右端的数字。";
-    else if (ev.tag === "contradiction") text = `第 ${ev.payload + 1} 行剩下 0 = 1：矛盾，这个局面无解。`;
+    else if (ev.tag === "contradiction") text = `第 ${ev.payload + 1} 行剩下 0 = 1：矛盾——这一行就是“为什么无解”的答案，说明这些条件不可能同时满足。`;
     else if (ev.tag === "solve") text = `读出第一行第 ${ev.payload[0] + 1} 格：p${ev.payload[0] + 1} = ${ev.payload[2]}。`;
     else text = `全部解完：p = ${bitsStr(Number(ev.payload), S.cols)}。`;
   } else if (a.tag === "final") {
-    text = W.doneP === null
-      ? "对这个局面，消元出现了 0 = 1：方程组无解，也就是说不存在任何第一行点法能把它变全白。"
-      : `解得第一行点法 p = ${bitsStr(Number(W.doneP), S.cols)}，和“一次追白演示”里算出的完全一样。实际玩的时候这张表可以做一次：把 M 求逆，以后任何局面读出 r 代进去就知道第一行点哪几格。`;
+    if (W.doneP === null) {
+      text = "对这个局面，消元出现了 0 = 1：方程组无解，也就是说不存在任何第一行点法能把它变全白。教学到这里结束（想玩的话，回游戏里点“建议修正”可以一键改成可解布局）。";
+    } else {
+      const freeCount = W.actions.filter((x) => x.tag === "elim" && x.ev.tag === "free").length;
+      const multi = freeCount
+        ? `注意：这个方程组有多组解（自由变量有 ${freeCount} 个），演示取的是自由变量全为 0 的一组。`
+        : "";
+      const advice = D.fullRank
+        ? "实际玩的时候这张表可以做一次：把 M 求逆，以后任何局面读出 r 代进去就知道第一行点哪几格。"
+        : "这个尺寸的 M 不可逆：同一串 r 可能对应多组第一行点法，实际玩的时候解一遍小方程组、任取一组即可。";
+      text = `解得第一行点法 p = ${bitsStr(Number(W.doneP), S.cols)}，和“一次追白演示”里算出的完全一样。${multi}${advice}`;
+    }
   }
   setStatus(text, a.tag === "final" ? (W.doneP === null ? "bad" : "ok") : "");
   drawBoard(); updatePanel();

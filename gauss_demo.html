@@ -163,6 +163,7 @@ function setup(rows, cols, board, note) {
   S.events = eliminationEvents(eqs, n);
   S.index = -1; S.focus = {}; S.playing = false;
   cancelApply();
+  $("#apply").disabled = false;
   drawBoard();
   if (note) setStatus(note);
   step();
@@ -302,12 +303,13 @@ function narrate(ev) {
     text = `第 ${target + 1} 行第 ${col + 1} 列是 1：整行异或上主元行（第 ${prow + 1} 行），这一列就消成 0，其它列同步更新。`;
   } else if (ev.tag === "free") {
     S.focus = { col: ev.payload };
-    text = `第 ${ev.payload + 1} 列整列是 0，没有主元：这个未知数取 0。`;
+    text = `第 ${ev.payload + 1} 列整列是 0，没有主元：第 ${ev.payload + 1} 格是一个“自由变量”——点或不点都可以，说明这个局面有多组解（点法不唯一）。演示里默认取 0（不点这一格）。`;
   } else if (ev.tag === "consistent") {
     text = "消元结束，没有出现 0 = 1 的矛盾行：局面有解。下面从每个主元行直接读出未知数。";
   } else if (ev.tag === "contradiction") {
     S.focus = { bad: ev.payload };
-    text = `第 ${ev.payload + 1} 行剩下 0 = 1：无解——这就是“这个摆法不可能全白”的数学原因。`;
+    $("#apply").disabled = true;
+    text = `第 ${ev.payload + 1} 行剩下 0 = 1：无解——这说明“每个格子都要变白”的要求互相矛盾，任何点法都不可能同时满足，所以这个局面怎么点都赢不了。演示到此结束，没有解可以应用（想玩的话，回游戏里点“建议修正”可以一键改成可解布局）。`;
   } else if (ev.tag === "solve") {
     const [col, row, bit] = ev.payload;
     const r = Math.floor(col / S.cols), c = col % S.cols;
@@ -315,9 +317,16 @@ function narrate(ev) {
     text = `格子 (${r + 1},${c + 1}) 的未知数 = ${bit}：${bit ? "要点" : "不点"}。`;
   } else {
     S.solution = ev.payload;
+    $("#apply").disabled = false;
     const cells = [];
     for (let i = 0; i < S.rows * S.cols; i++) if ((ev.payload >> BigInt(i)) & 1n) cells.push(`(${Math.floor(i / S.cols) + 1},${(i % S.cols) + 1})`);
-    text = `解出来了：一共点 ${cells.length} 个格子 → ${cells.join("、") || "无需点击"}。点“应用到棋盘”看看效果。`;
+    const freeCount = S.events.filter((x) => x.tag === "free").length;
+    const multi = freeCount
+      ? (freeCount <= 10
+        ? `注意：这个局面有多组解——自由变量有 ${freeCount} 个，共 2^${freeCount} = ${2 ** freeCount} 组可行点法（演示取的是自由变量全为 0 的那一组）。`
+        : "注意：这个局面有多组解（自由变量很多），演示取的是自由变量全为 0 的那一组。")
+      : "";
+    text = `解出来了：一共点 ${cells.length} 个格子 → ${cells.join("、") || "无需点击"}。${multi}点“应用到棋盘”看看效果。`;
     setStatus(text, "ok");
     drawMatrix();
     return;

@@ -95,7 +95,7 @@ a.btn.primary{color:#fff}
     <button id="btnStart" class="btn primary">开始游戏</button>
     <button id="btnClear" class="btn">清空</button>
     <button id="btnRandom" class="btn">随机</button>
-    <button id="btnFix" class="btn">自动修正</button>
+    <button id="btnFix" class="btn">建议修正</button>
     <button id="btnBack" class="btn ghost">返回</button>
   </nav>
 </div>
@@ -124,7 +124,7 @@ a.btn.primary{color:#fff}
     <p><b>规则</b>：点一个方块，它和上下左右相邻的方块一起反色（白变黑、黑变白）。把所有方块变回白色就赢。角上的方块影响 3 格，边上 4 格，中间 5 格。</p>
     <p><b>开局</b>：每局的黑块都是从全白开始“随机点击若干次”生成的，所以一定有解，中途也不会走进死局。</p>
     <p><b>追白法</b>：第一行先不点，从第二行开始，看到上一行哪格是黑的，就点它正下方那格，一行行往下推；推到最后一行如果全白了就赢了，否则换一种第一行的点法重来。</p>
-    <p><b>自定义</b>：点“自定义”可以自己摆黑块，界面会实时告诉你能不能解，不能解就点“自动修正”。</p>
+    <p><b>自定义</b>：点“自定义”可以自己摆黑块，界面会实时告诉你能不能解；无解时会建议你点“建议修正”一键改成可解布局，但你也可以直接开始——进游戏后打开教学页，会演示为什么这个布局无解。</p>
     <p style="color:#6b7280">提示：在手机浏览器里选“添加到主屏幕”，打开就像一个小 App。电脑版还带高斯消元和追白法的逐步演示。</p>
     <a class="btn wide" href="gauss_demo.html" style="margin-top:14px">教学 1：高斯消元演示</a>
     <a class="btn wide" href="chase_demo.html" style="margin-top:8px">教学 2：追白法 + 原理讲解</a>
@@ -404,7 +404,7 @@ function updateEditStatus(prefix) {
   } else if (isSolvable()) {
     setStatus(head + `编辑中（${black} 个黑块）：布局可解 ✓ 点“开始游戏”开局。`, "ok");
   } else {
-    setStatus(head + `编辑中（${black} 个黑块）：该布局无解 ✗ 请调整、自动修正或随机。`, "bad");
+    setStatus(head + `编辑中（${black} 个黑块）：该布局无解 ✗ 建议修正（点“建议修正”自动改成可解），也可以直接开始。`, "bad");
   }
 }
 
@@ -478,7 +478,10 @@ function undo() {
 function hint() {
   if (state.won) { setStatus("已经全部变白啦。", "ok"); return; }
   const sol = solveCurrent();
-  if (sol === null) { setStatus("当前局面无解（理论上不会出现）。", "bad"); return; }
+  if (sol === null) {
+    setStatus("这个局面无解：不存在任何点击组合能把它全部变白。打开右上角“?”里的教学页，可以看到为什么（消元时会出现 0 = 1 的矛盾行）。", "bad");
+    return;
+  }
   if (sol === 0n) { setStatus("棋盘已经全白。", "ok"); return; }
   let low = sol & -sol, idx = 0;
   while (low > 1n) { low >>= 1n; idx++; }
@@ -486,7 +489,12 @@ function hint() {
   let rest = 0, x = sol;
   while (x) { x &= x - 1n; rest++; }
   renderBoard();
-  setStatus(`提示：橙色格子是可行的一步（这个走法约 ${rest} 步，不一定最少）。`, "hint");
+  const multi = parityBasis(state.rows, state.cols).length > 0;
+  if (multi) {
+    setStatus(`提示：这个局面有多组解，橙色格子是其中一组解的下一步（这一组约 ${rest} 步）。`, "hint");
+  } else {
+    setStatus(`提示：橙色格子是可行的一步（这个走法约 ${rest} 步，不一定最少）。`, "hint");
+  }
 }
 
 /* ---------------- 自定义黑块 ---------------- */
@@ -571,7 +579,7 @@ function autoFix() {
 function startCustom() {
   const black = state.board.reduce((a, b) => a + b, 0);
   if (black === 0) { setStatus("全白开局没法玩：先摆几个黑块，或点“随机”。", "bad"); return; }
-  if (!isSolvable()) { setStatus("这个布局无解：请调整、点“自动修正”，或点“随机”。", "bad"); return; }
+  const solvable = isSolvable();
   state.mode = "play";
   state.snapshot = null;
   state.history = [];
@@ -581,7 +589,11 @@ function startCustom() {
   switchBars();
   renderBoard();
   updateHud();
-  setStatus(`自定义开局（${black} 个黑块，保证有解）：全部变白即通关。`, "ok");
+  if (solvable) {
+    setStatus(`自定义开局（${black} 个黑块，保证有解）：全部变白即通关。`, "ok");
+  } else {
+    setStatus(`自定义开局（${black} 个黑块）：这个布局无解——不存在任何能全部变白的点法。可以随便试；想看“为什么无解”，点右上角“?”打开教学页。`, "bad");
+  }
   save();
 }
 
