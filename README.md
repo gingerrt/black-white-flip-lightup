@@ -1,7 +1,8 @@
 # 黑白反转（Black-White Flip）
 
 点一个方块，它和上下左右相邻的方块一起反色（白变黑、黑变白）；把所有方块恢复成白色即通关。
-角上的方块影响 3 格，边上 4 格，中间 5 格。手机浏览器直接打开就能玩。
+角上的方块影响 3 格，边上 4 格，中间 5 格。手机浏览器直接打开就能玩，另外还带一个功能相同的
+Python 桌面版。
 
 ## 文件说明
 
@@ -10,6 +11,7 @@
 | `index.html` | 游戏本体（手机友好，纯前端，无依赖） |
 | `gauss_demo.html` | 教学 1：高斯消元演示（逐步看矩阵消元怎么解出答案） |
 | `chase_demo.html` | 教学 2：追白法演示 + 原理讲解（异或方程从哪来、怎么解） |
+| `black_white_flip.py` | 电脑版（Python 3 + tkinter，自带三个演示窗口） |
 
 ## 玩法与功能
 
@@ -24,6 +26,22 @@
 ## 本地运行
 
 不需要服务器：直接用浏览器打开 `index.html` 即可。
+
+## 电脑版（Python）
+
+`black_white_flip.py` 是桌面版：Python 3 + tkinter，无需任何第三方库（Windows 官方 Python 自带）。
+
+```bash
+python black_white_flip.py          # 默认 3x3
+python black_white_flip.py 5 6      # 指定 5 行 6 列
+python black_white_flip.py 6x6      # 也可以写成 AxB
+```
+
+窗口内快捷键：`R` 新一局，`U` / `Z` 撤销，`H` 提示，`E` 自定义黑块，
+`G` 高斯消元演示，`T` 追白法演示（演示窗口里按 `P` 打开原理讲解）。
+规则、默认尺寸（3×3）、自定义黑块和自动修正都和网页版一致。
+
+自带检查：`python black_white_flip.py --selftest`（逻辑自检，输出 mismatch count）。
 
 ## 部署（GitHub Pages）
 
