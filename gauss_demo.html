@@ -38,7 +38,7 @@ button:disabled{opacity:.45}
 <div id="app">
   <header>
     <h1>高斯消元演示</h1>
-    <a class="link" href="index.html">← 返回游戏</a>
+    <a class="link" href="index.html">← 返回游戏</a> · <a class="link" href="sizes.html">尺寸规则</a>
   </header>
   <div id="status"></div>
   <div class="boardRow">
@@ -179,6 +179,17 @@ function loadGameBoard() {
     if (d.board.length !== d.rows * d.cols) return null;
     return { rows: d.rows, cols: d.cols, board: d.board.map((v) => (v ? 1 : 0)) };
   } catch (e) { return null; }
+}
+
+function loadFromHash() {
+  const m = /#b=(\d+),(\d+),([0-9a-fA-F]+)/.exec(location.hash || "");
+  if (!m) return null;
+  const r = Number(m[1]), c = Number(m[2]);
+  if (!r || !c || r * c > MAX_CELLS) return null;
+  const mask = BigInt("0x" + m[3]);
+  const board = [];
+  for (let i = 0; i < r * c; i++) board.push(Number((mask >> BigInt(i)) & 1n));
+  return { rows: r, cols: c, board };
 }
 
 /* ---------- 绘制 ---------- */
@@ -416,8 +427,13 @@ window.addEventListener("resize", () => { drawBoard(); drawMatrix(); });
 
 /* ---------- 启动 ---------- */
 (function start() {
+  const fromHash = loadFromHash();
   const fromGame = loadGameBoard();
-  if (fromGame) {
+  if (fromHash) {
+    setup(fromHash.rows, fromHash.cols, fromHash.board,
+      "这是从“哪些尺寸会无解”页面带过来的例子。点“下一步”一步步看消元过程——最后会出现 0 = 1 的矛盾行。");
+    $("#boardTip").textContent = "棋盘预览（页面带来的例子）";
+  } else if (fromGame) {
     setup(fromGame.rows, fromGame.cols, fromGame.board,
       "已读取你正在玩的那局。点“下一步”看高斯消元怎么解它（也可以直接跳到最后）。");
     $("#boardTip").textContent = "棋盘预览（当前这一局）";

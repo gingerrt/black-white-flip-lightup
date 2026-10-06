@@ -128,6 +128,7 @@ a.btn.primary{color:#fff}
     <p style="color:#6b7280">提示：在手机浏览器里选“添加到主屏幕”，打开就像一个小 App。电脑版还带高斯消元和追白法的逐步演示。</p>
     <a class="btn wide" href="gauss_demo.html" style="margin-top:14px">教学 1：高斯消元演示</a>
     <a class="btn wide" href="chase_demo.html" style="margin-top:8px">教学 2：追白法 + 原理讲解</a>
+    <a class="btn wide" href="sizes.html" style="margin-top:8px">教学 3：哪些尺寸会无解</a>
     <button id="helpClose" class="btn primary wide">知道了</button>
   </div>
 </div>
@@ -479,7 +480,7 @@ function hint() {
   if (state.won) { setStatus("已经全部变白啦。", "ok"); return; }
   const sol = solveCurrent();
   if (sol === null) {
-    setStatus("这个局面无解：不存在任何点击组合能把它全部变白。打开右上角“?”里的教学页，可以看到为什么（消元时会出现 0 = 1 的矛盾行）。", "bad");
+    setStatus("这个局面无解：不存在任何点击组合能把它全部变白。打开“?”里的教学页，可以看到为什么（消元时会出现 0 = 1 的矛盾行）。", "bad");
     return;
   }
   if (sol === 0n) { setStatus("棋盘已经全白。", "ok"); return; }
@@ -592,7 +593,7 @@ function startCustom() {
   if (solvable) {
     setStatus(`自定义开局（${black} 个黑块，保证有解）：全部变白即通关。`, "ok");
   } else {
-    setStatus(`自定义开局（${black} 个黑块）：这个布局无解——不存在任何能全部变白的点法。可以随便试；想看“为什么无解”，点右上角“?”打开教学页。`, "bad");
+    setStatus(`自定义开局（${black} 个黑块）：这个布局无解——不存在任何能全部变白的点法。可以随便试；想看“为什么无解”，点“?”打开教学页。`, "bad");
   }
   save();
 }

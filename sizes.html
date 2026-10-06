@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#f2f3f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>哪些尺寸会无解 · 黑白反转</title>
+<style>
+:root{--bg:#f2f3f7;--text:#1f2430;--muted:#6b7280;--accent:#3b82f6;--accent2:#2f6dd0;
+  --hint:#f59e0b;--ok:#15803d;--bad:#dc2626;--panel:#fff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);display:flex;justify-content:center;overscroll-behavior:none;
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Segoe UI",sans-serif}
+#app{width:100%;max-width:560px;min-height:100%;padding:calc(10px + env(safe-area-inset-top)) 14px calc(16px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;gap:10px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+h1{font-size:18px;margin:0}
+.link{font-size:13px;color:var(--accent);text-decoration:none}
+.card{background:var(--panel);border-radius:14px;padding:14px;box-shadow:0 1px 3px rgba(15,20,30,.08)}
+.card h2{font-size:15px;margin:0 0 8px}
+.card p{font-size:13.5px;line-height:1.65;color:#333a46;margin:8px 0}
+.card b{color:var(--text)}
+.row{display:flex;align-items:center;gap:10px;margin:10px 0}
+.label{width:34px;color:var(--muted);font-size:13px}
+.step{width:40px;height:40px;border-radius:11px;border:1px solid #d9dde6;background:#fff;font-size:19px;line-height:1}
+.step:active{background:#eef1f6}
+.val{min-width:34px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+.verdict{font-size:14px;line-height:1.6;padding:10px 12px;border-radius:10px;background:#f6f7fb;margin-top:6px}
+.verdict.ok{background:#eaf7ef;color:var(--ok)}
+.verdict.bad{background:#fdeeee;color:var(--bad)}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.5;margin:8px 0 0;
+  white-space:pre-wrap;word-break:break-all;color:#333a46}
+button{width:100%;border:0;border-radius:12px;padding:12px 10px;font-size:14px;font-family:inherit;
+  background:#eef1f6;color:var(--text);touch-action:manipulation}
+button.primary{background:var(--accent);color:#fff}
+button:active{transform:translateY(1px)}
+button:disabled{opacity:.45}
+.hidden{display:none !important}
+.tip{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:6px}
+.grid{display:grid;gap:3px;margin-top:8px;justify-content:start}
+.cell{width:14px;height:14px;border-radius:3px;background:#fff;border:1px solid #d9dde6}
+.cell.on{background:#20242c;border-color:#0e1116}
+.cell.mark{background:#fde68a;border-color:#f59e0b}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>哪些尺寸会无解</h1>
+    <a class="link" href="index.html">← 返回游戏</a>
+  </header>
+
+  <div class="card">
+    <h2>三条规则</h2>
+    <p><b>① 有些尺寸怎么摆都有解。</b>这种尺寸的校验向量个数 k = 0，任何布局都能还原，而且解法唯一。常见的有：2×2、3×3、3×4、4×5、5×6、6×6、7×7、8×8、10×10、12×12、25×25……</p>
+    <p><b>② 有些尺寸存在"死局"。</b>这种尺寸有 k &gt; 0 个校验向量，只有 1/2^k 的摆法能解开，其余摆法无论怎么点都不可能全白。比如 4×4 只有 1/16 可解、5×5 是 1/4、9×9 只有 1/256、11×11 是 1/64。</p>
+    <p><b>③ 可解的摆法往往不止一种解法。</b>每个可解布局有 2^k 组不同的点法（自由变量带来的），游戏里的"提示"给的是其中一组。</p>
+  </div>
+
+  <div class="card">
+    <h2>查一查你的棋盘</h2>
+    <div class="row">
+      <span class="label">行</span>
+      <button class="step" data-t="rows" data-d="-1">−</button>
+      <span class="val" id="rowsVal">4</span>
+      <button class="step" data-t="rows" data-d="1">+</button>
+      <span class="label" style="margin-left:12px">列</span>
+      <button class="step" data-t="cols" data-d="-1">−</button>
+      <span class="val" id="colsVal">4</span>
+      <button class="step" data-t="cols" data-d="1">+</button>
+    </div>
+    <div class="verdict" id="verdict"></div>
+    <div class="tip">游戏里支持 1~25 的自定义尺寸；这里为了把图案画清楚，范围是 2~12。</div>
+  </div>
+
+  <div class="card">
+    <h2>为什么会有无解？（原理）</h2>
+    <p>把"每格点不点"当成未知数 x，把"每格最后要变白"当成一条方程，整个棋盘就写成一个方程组 <b>A·x = b</b>（全在 0/1 的异或世界里算）。</p>
+    <p>有些非零的 0/1 图案 v 满足一个特殊性质：<b>不管你怎么点</b>，落在 v 黑点位置上的"被翻转总次数"永远是偶数。这样的 v 叫<b>校验向量</b>。</p>
+    <p>如果某个布局 b 在 v 的黑点位置上有<b>奇数</b>个黑块，就和 v 的性质矛盾——永远还原不了，也就是无解。校验向量的个数就是 k：k = 0 表示不存在这种障碍（全可解）；k &gt; 0 时，恰好 1/2^k 的布局能躲开所有障碍。</p>
+    <p id="basisTitle"></p>
+    <div class="grid" id="basisGrid"></div>
+    <div class="tip">黑格 = 校验向量里为 1 的位置。下面例子里被判定的格子会用黄色标出来。</div>
+  </div>
+
+  <div class="card">
+    <h2>详细过程：抓一个无解例子走一遍</h2>
+    <p>点下面按钮随机生成一个无解布局，看它是被哪个校验向量"抓到"的；然后可以把这个例子送进"高斯消元演示"，逐步看到矩阵消元最后出现 <b>0 = 1</b> 的那一行——那一步就是"为什么无解"的答案。</p>
+    <button id="genBtn" class="primary">生成一个无解例子</button>
+    <div id="exWrap" class="hidden" style="margin-top:12px">
+      <div class="grid" id="exGrid"></div>
+      <p id="exWhy"></p>
+      <div class="grid" id="detGrid"></div>
+      <div class="tip" id="detTip"></div>
+      <button id="demoBtn" class="primary" style="margin-top:10px">在高斯消元演示里逐步看这个例子</button>
+    </div>
+    <div class="tip" id="genTip"></div>
+  </div>
+
+  <div class="card">
+    <h2>想避免遇到无解？</h2>
+    <p>两个办法：① 选 k = 0 的尺寸（比如 3×3、5×6、6×6、7×7、8×8、10×10）；② 摆完点一下游戏里的"建议修正"，一键改成可解布局；或者直接开始，用教学页看它为什么无解。</p>
+    <p><a class="link" href="gauss_demo.html">→ 高斯消元演示</a> · <a class="link" href="chase_demo.html">→ 追白法教学</a> · <a class="link" href="index.html">→ 回游戏</a></p>
+  </div>
+</div>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const MIN_SIZE = 2, MAX_SIZE = 12;
+let rows = 4, cols = 4;
+let example = null, exampleBasis = null, exampleDetector = -1;
+
+/* ---------- 逻辑（和游戏同一套 GF(2) 计算） ---------- */
+const eqCache = new Map();
+const basisCache = new Map();
+
+function equationRows(r, c) {
+  const key = r + "x" + c;
+  if (eqCache.has(key)) return eqCache.get(key);
+  const list = [];
+  for (let i = 0; i < r; i++) for (let j = 0; j < c; j++) {
+    let m = 0n;
+    const add = (rr, cc) => { m |= 1n << BigInt(rr * c + cc); };
+    add(i, j);
+    if (i > 0) add(i - 1, j);
+    if (i < r - 1) add(i + 1, j);
+    if (j > 0) add(i, j - 1);
+    if (j < c - 1) add(i, j + 1);
+    list.push(m);
+  }
+  eqCache.set(key, list);
+  return list;
+}
+
+function parityBasis(r, c) {
+  const key = r + "x" + c;
+  if (basisCache.has(key)) return basisCache.get(key);
+  const n = r * c;
+  const data = equationRows(r, c).map((m, i) => [m, 1n << BigInt(i)]);
+  let rank = 0;
+  for (let col = 0; col < n; col++) {
+    let pick = -1;
+    for (let i = rank; i < data.length; i++) if ((data[i][0] >> BigInt(col)) & 1n) { pick = i; break; }
+    if (pick < 0) continue;
+    [data[rank], data[pick]] = [data[pick], data[rank]];
+    for (let i = 0; i < data.length; i++) {
+      if (i !== rank && ((data[i][0] >> BigInt(col)) & 1n)) {
+        data[i][0] ^= data[rank][0];
+        data[i][1] ^= data[rank][1];
+      }
+    }
+    rank++;
+  }
+  const basis = data.filter(([a]) => a === 0n).map(([, e]) => e);
+  basisCache.set(key, basis);
+  return basis;
+}
+
+function syndromeOf(basis, mask) {
+  let s = 0n;
+  for (let j = 0; j < basis.length; j++) {
+    let x = basis[j] & mask, parity = 0;
+    while (x) { x &= x - 1n; parity ^= 1; }
+    if (parity) s |= 1n << BigInt(j);
+  }
+  return s;
+}
+
+function maskOfB(board) {
+  let m = 0n;
+  for (let i = 0; i < board.length; i++) if (board[i]) m |= 1n << BigInt(i);
+  return m;
+}
+function bitCount(x) { let n = 0; while (x) { x &= x - 1n; n++; } return n; }
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+/* ---------- 渲染 ---------- */
+function drawGrid(el, r, c, mask, markMask) {
+  el.innerHTML = "";
+  el.style.gridTemplateColumns = `repeat(${c}, 14px)`;
+  for (let i = 0; i < r * c; i++) {
+    const d = document.createElement("div");
+    const on = (mask >> BigInt(i)) & 1n;
+    const mark = markMask !== undefined && ((markMask >> BigInt(i)) & 1n);
+    d.className = "cell" + (on ? " on" : "") + (mark ? " mark" : "");
+    el.appendChild(d);
+  }
+}
+
+function refreshSize() {
+  $("#rowsVal").textContent = rows;
+  $("#colsVal").textContent = cols;
+  const basis = parityBasis(rows, cols);
+  const k = basis.length;
+  const v = $("#verdict");
+  if (k === 0) {
+    v.className = "verdict ok";
+    v.textContent = `✅ ${rows}×${cols}：不会出现无解。任何摆法都能解开，而且解法唯一（k = 0）。`;
+    $("#basisTitle").textContent = "这个尺寸没有校验向量（k = 0），所以不存在“奇数障碍”。";
+    $("#basisGrid").innerHTML = "";
+  } else {
+    v.className = "verdict bad";
+    v.textContent = `⚠️ ${rows}×${cols}：有死局。只有 1/${2 ** k} 的摆法可解，其余都无解；每个可解摆法有 ${2 ** k} 组解法（k = ${k}）。`;
+    $("#basisTitle").textContent = `这个尺寸有 ${k} 个独立的校验向量，下面是第一个的图案（黑格 = 1）：`;
+    drawGrid($("#basisGrid"), rows, cols, basis[0]);
+  }
+  example = null; exampleBasis = basis; exampleDetector = -1;
+  $("#exWrap").classList.add("hidden");
+  $("#genTip").textContent = k === 0 ? "这个尺寸没有无解例子——这正是“全可解”的含义。" : "";
+  $("#genBtn").disabled = k === 0;
+}
+
+document.querySelectorAll(".step").forEach((b) => {
+  b.addEventListener("click", () => {
+    const t = b.dataset.t, d = Number(b.dataset.d);
+    if (t === "rows") rows = Math.max(MIN_SIZE, Math.min(MAX_SIZE, rows + d));
+    else cols = Math.max(MIN_SIZE, Math.min(MAX_SIZE, cols + d));
+    refreshSize();
+  });
+});
+
+$("#genBtn").addEventListener("click", () => {
+  const basis = parityBasis(rows, cols);
+  if (!basis.length) return;
+  const n = rows * cols;
+  let board = null, mask = 0n, syndrome = 0n;
+  for (let attempt = 0; attempt < 600; attempt++) {
+    const b = new Array(n).fill(0);
+    const count = Math.max(2, Math.round(n * 0.35));
+    for (const i of shuffle([...Array(n).keys()]).slice(0, count)) b[i] = 1;
+    mask = maskOfB(b);
+    syndrome = syndromeOf(basis, mask);
+    if (syndrome !== 0n) { board = b; break; }
+  }
+  if (!board) { $("#genTip").textContent = "没抽到无解例子，再点一次试试。"; return; }
+  example = board;
+  const det = [];
+  for (let j = 0; j < basis.length; j++) if ((syndrome >> BigInt(j)) & 1n) det.push(j);
+  exampleDetector = det[0];
+  const v = basis[exampleDetector];
+  const overlap = v & mask;
+  drawGrid($("#exGrid"), rows, cols, mask);
+  drawGrid($("#detGrid"), rows, cols, v, overlap);
+  $("#exWhy").innerHTML = `这个随机布局有 <b>${bitCount(mask)}</b> 个黑块。用第 <b>${exampleDetector + 1}</b> 个校验向量去数：它的黑格位置上盖住了 <b>${bitCount(overlap)}</b> 个黑块——是<b>奇数</b>，和校验向量的性质矛盾，所以这个局面<b>无解</b>。`;
+  $("#detTip").textContent = "下面是这个校验向量的图案，黄色 = 与布局重叠的格子。";
+  $("#genTip").textContent = "";
+  $("#exWrap").classList.remove("hidden");
+});
+
+$("#demoBtn").addEventListener("click", () => {
+  if (!example) return;
+  const hex = maskOfB(example).toString(16);
+  location.href = `gauss_demo.html#b=${rows},${cols},${hex}`;
+});
+
+refreshSize();
+window.__sizes = {
+  parityBasis, syndromeOf, maskOfB,
+  get rows() { return rows; },
+  get cols() { return cols; },
+  get example() { return example; },
+};
+</script>
+</body>
+</html>
