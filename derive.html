@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#f2f3f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>完整推导：A·x = b 到校验向量 · 黑白反转</title>
+<style>
+:root{--bg:#f2f3f7;--text:#1f2430;--muted:#6b7280;--accent:#3b82f6;--accent2:#2f6dd0;
+  --hint:#f59e0b;--ok:#15803d;--bad:#dc2626;--panel:#fff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);display:flex;justify-content:center;overscroll-behavior:none;
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Segoe UI",sans-serif}
+#app{width:100%;max-width:600px;min-height:100%;padding:calc(10px + env(safe-area-inset-top)) 14px calc(20px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;gap:10px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+h1{font-size:18px;margin:0;line-height:1.35}
+.link{font-size:13px;color:var(--accent);text-decoration:none}
+.card{background:var(--panel);border-radius:14px;padding:14px;box-shadow:0 1px 3px rgba(15,20,30,.08)}
+.card h2{font-size:15.5px;margin:0 0 8px}
+.card h3{font-size:13.5px;margin:12px 0 4px;color:#2b3240}
+.card p{font-size:13.5px;line-height:1.75;color:#333a46;margin:8px 0}
+.card li{font-size:13.5px;line-height:1.7;color:#333a46;margin:4px 0}
+.card b{color:var(--text)}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6;margin:8px 0 0;
+  white-space:pre-wrap;word-break:break-word;color:#333a46;background:#f7f8fc;border-radius:10px;padding:10px}
+.toc{display:flex;flex-direction:column;gap:6px}
+.toc a{font-size:13px;color:var(--accent);text-decoration:none;padding:8px 10px;background:#fff;border-radius:10px;
+  box-shadow:0 1px 3px rgba(15,20,30,.06)}
+.tip{font-size:11.5px;color:var(--muted);line-height:1.6;margin-top:6px}
+.grid{display:grid;gap:3px;margin-top:8px;justify-content:start}
+.cell{width:16px;height:16px;border-radius:3px;background:#fff;border:1px solid #d9dde6}
+.cell.on{background:#20242c;border-color:#0e1116}
+.cell.crossOn{background:#c7dbff;border-color:#3b82f6}
+.cell.on.crossOn{background:#1d4ed8;border-color:#1e3a8a}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13px}
+th,td{border:1px solid #e3e6ee;padding:6px 8px;text-align:left}
+th{background:#f6f7fb;font-weight:600}
+.mono-table td{font-family:ui-monospace,Menlo,Consolas,monospace}
+details{margin:8px 0;background:#f7f8fc;border-radius:10px;padding:10px 12px}
+summary{cursor:pointer;font-weight:600;font-size:13.5px}
+details p{margin:8px 0 0}
+.verdict{font-size:13.5px;line-height:1.6;padding:10px 12px;border-radius:10px;background:#f6f7fb;margin-top:8px}
+.verdict.ok{background:#eaf7ef;color:var(--ok)}
+.verdict.bad{background:#fdeeee;color:var(--bad)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>完整推导：<br>A·x = b 是怎么变成"校验向量"的</h1>
+    <a class="link" href="sizes.html">← 尺寸规则</a>
+  </header>
+
+  <div class="card">
+    <p>这份长文把"哪些尺寸会无解"里那句 <b>A·x = b</b> 从头拆开讲：先讲清每个符号对应棋盘的什么，再用一个 1×2 的小棋盘把所有东西手算一遍，然后一步步推到"校验向量"，最后解释为什么尺寸会决定有没有校验向量。慢慢看，每一步都有实际数字对得上。</p>
+    <div class="toc">
+      <a href="#s0">0. 预备：这个游戏里的"矩阵"是什么</a>
+      <a href="#s1">1. 最小例子：1×2 棋盘全部算一遍</a>
+      <a href="#s2">2. "有解"的严格含义：b 必须在 A 的列空间里</a>
+      <a href="#s3">3. 校验向量 = 一个"永远不变"的量</a>
+      <a href="#s4">4. 推导：两边同乘 vᵀ 到底在干什么</a>
+      <a href="#s5">5. 为什么这些检查是完整的</a>
+      <a href="#s6">6. 计数：1/2^k 和 2^k 是怎么来的</a>
+      <a href="#s7">7. 4×4 实例：亲手验证"每个十字都是偶数"</a>
+      <a href="#s8">8. 怎么系统地找校验向量：递推 + 收口</a>
+      <a href="#s9">9. 为什么偏偏是这几种尺寸（含多项式手算）</a>
+      <a href="#s10">10. 常见疑问</a>
+      <a href="#s11">11. 练一练（附答案）</a>
+    </div>
+  </div>
+
+  <div class="card" id="s0">
+    <h2>0. 预备：这个游戏里的"矩阵"是什么</h2>
+    <p>第一步先把棋盘翻译成数字，只需要两样东西：<b>把格子编号</b>，和<b>把每个按钮的效果写成一个 0/1 向量</b>。</p>
+    <h3>① 编号</h3>
+    <p>格子按行优先编号：第 1 行从左到右是 1、2、3、…，接着第 2 行继续编号。比如 1×2 棋盘就是两个格子 1、2；4×4 就是 1 到 16。</p>
+    <h3>② b：当前的黑白布局</h3>
+    <p><b>b</b> 是一个 0/1 向量，长度等于格子数。<b>b 里第 i 位是 1，表示第 i 格现在是黑的</b>，0 表示白的。例如 1×2 棋盘上"第一个格子黑、第二个格子白"，就是 b = (1, 0)。</p>
+    <h3>③ x：按法</h3>
+    <p><b>x</b> 也是一个 0/1 向量，和格子一样长。<b>x 里第 j 位是 1，表示"我们要按第 j 格一次"</b>，0 表示不按。</p>
+    <p>为什么每格只需要 0 或 1、不需要 2 或 3？因为 <b>按两次 = 没按</b>（同一个格子被翻转两次就回到原样），而且 <b>按的先后顺序不影响结果</b>（翻转是可以交换的）。所以"每格最多按一次"就涵盖了所有可能的按法。</p>
+    <h3>④ c_j：按第 j 格的效果</h3>
+    <p>按第 j 格会翻转"它自己 + 上下左右相邻"的格子。<b>把这个效果也写成一个 0/1 向量 c_j</b>：被翻转的格子处写 1，其它写 0。这个图案就是我们一直说的"十字"。</p>
+    <p>举个例子，1×2 棋盘上：</p>
+    <ul>
+      <li>按第 1 格 → 翻转第 1、2 格 → c₁ = (1, 1)</li>
+      <li>按第 2 格 → 翻转第 2 格和第 1 格（它是左邻居）→ c₂ = (1, 1)</li>
+    </ul>
+    <h3>⑤ 把所有按钮的效果叠起来</h3>
+    <p>如果按法选好了（x 定下来了），最后棋盘会变成：</p>
+    <div class="mono">最终布局 = b ⊕ c₁·x₁ ⊕ c₂·x₂ ⊕ … ⊕ cₙ·xₙ</div>
+    <p>这里 ⊕ 是异或（1⊕1=0，1⊕0=1），而 c_j·x_j 的意思是"x_j 是 1 就选上这个十字，是 0 就当作没有"。<b>因为异或的加法就是"翻转"</b>：一个格子被奇数个选中的十字盖住就翻色，被偶数个盖住就不变。</p>
+    <p>我们要的是"全白"，也就是最终布局 = 0（每个格子都是 0）。把它搬一下：</p>
+    <div class="mono">c₁·x₁ ⊕ c₂·x₂ ⊕ … ⊕ cₙ·xₙ = b</div>
+    <h3>⑥ 写成矩阵</h3>
+    <p>把 c₁、c₂、…、cₙ <b>竖着排成一排</b>，就得到矩阵 A（它有 n 行 n 列，第 j 列就是 c_j）。上面那行式子就写成：</p>
+    <div class="mono">A · x = b</div>
+    <p>这就是全部来历：<b>A 的每一列 = 一个按钮的效果（一个十字）；x = 每格按不按；b = 当前黑块。</b>解出 x 就是"该按哪些格子"。</p>
+  </div>
+
+  <div class="card" id="s1">
+    <h2>1. 最小例子：1×2 棋盘全部算一遍</h2>
+    <p>这个例子只有两个格子，小到可以把所有可能都列出来。建议拿张纸跟着写一遍。</p>
+    <p>1×2 棋盘上，两个按钮的效果上面算过了，都是 c₁ = c₂ = (1,1)。于是</p>
+    <div class="mono">A = [ 1  1 ]
+    [ 1  1 ]</div>
+    <p>现在把 4 种按法（x）全试一遍，看看 A·x 分别等于什么：</p>
+    <table class="mono-table">
+      <tr><th>x（按法）</th><th>A·x（效果）</th><th>意思</th></tr>
+      <tr><td>(0,0)</td><td>(0,0)</td><td>什么都不按，保持原样</td></tr>
+      <tr><td>(1,0)</td><td>(1,1)</td><td>按第 1 格 → 两格都翻</td></tr>
+      <tr><td>(0,1)</td><td>(1,1)</td><td>按第 2 格 → 两格都翻</td></tr>
+      <tr><td>(1,1)</td><td>(0,0)</td><td>两个都按 → 互相抵消，等于没按</td></tr>
+    </table>
+    <p>看第三列：<b>A·x 能产生的效果只有 (0,0) 和 (1,1) 两种</b>。这马上带来一个结论：</p>
+    <p><b>1×2 棋盘上，"只黑一个格子"的布局是无解的。</b>因为要消掉 b = (1,0) 就得让 A·x = (1,0)，但上表里根本没有 (1,0)；无论怎么按，两个格子永远一起翻，不可能只翻一个。</p>
+    <details>
+      <summary>练一练：b = (1,1) 时有解吗？有几种按法？</summary>
+      <p>有解，而且有 2 种：按第 1 格，或者按第 2 格（x = (1,0) 或 (0,1)，两者都给出 (1,1)）。顺便注意：这个布局恰好对应"从全白按一次"的结果。以后我们会发现这其实是同一件事的两种说法。</p>
+    </details>
+    <p>记住这个感觉：<b>无解不是"很难"的意思，而是"数学上根本不存在"</b>。1×2 上黑一个格子就是这种"根本不存在"。</p>
+  </div>
+
+  <div class="card" id="s2">
+    <h2>2. "有解"的严格含义：b 必须在 A 的列空间里</h2>
+    <p>把上一步的观察一般化。A·x 展开以后是：</p>
+    <div class="mono">A·x = x₁·c₁ ⊕ x₂·c₂ ⊕ … ⊕ xₙ·cₙ</div>
+    <p>也就是说，<b>A·x 能表达的所有东西，就是"挑若干个十字异或起来"</b>。把所有这样的结果收集成一个集合，数学上叫 A 的<b>列空间</b>（因为 c_j 是 A 的列）。</p>
+    <p>于是：</p>
+    <ul>
+      <li><b>有解</b> ⇔ b 在这个集合里（b 恰好能写成若干十字的异或和）</li>
+      <li><b>无解</b> ⇔ b 不在这个集合里</li>
+    </ul>
+    <p>问题在于：格子有 n 个，按法有 2ⁿ 种，直接一个个试太笨（25×25 就是 2^625 种）。所以我们需要一个"便宜"的判断方法——这就是校验向量的用处。</p>
+  </div>
+
+  <div class="card" id="s3">
+    <h2>3. 校验向量 = 一个"永远不变"的量</h2>
+    <p>先看一个更简单的看问题的角度：<b>别去管"能不能凑出 b"，改去问"有什么量是永远不变的"。</b></p>
+    <p>假设我们有一个 0/1 图案 v，它满足这样一个性质：</p>
+    <p><b>不管按哪一格，v 里被翻转的格子数都是偶数。</b></p>
+    <p>这个条件写成公式就是：对每个按钮的效果 c_j，都有</p>
+    <div class="mono">v · c_j = 0    （"=" 意思是"重叠个数是偶数"）</div>
+    <p>这里 v·c_j 的计算方法是：把 v 和 c_j 逐位相乘（两个都是 1 才算 1），再把所有结果异或起来——其实就是"数一数 v 的 1 和 c_j 的 1 重叠了几个，取奇偶性"。</p>
+    <p>为什么这个条件有用？因为"数一数黑块落在 v 的 1 位置上的个数、取奇偶性"这件事，<b>按任何按钮都不会改变</b>（每次翻转的都是 v 里的偶数个格子）。所以它是一个<b>不变量</b>。</p>
+    <p>而"全白"这个状态，这个量是 0（黑块个数是 0，偶数）。所以：</p>
+    <div class="mono">如果 v·b = 1（奇数），那么 b 永远变不成全白 → 无解</div>
+    <p>回到 1×2：v = (1,1) 就是这样一个图案？检查一下：两个十字都是 (1,1)，而 v·(1,1) = 1⊕1 = 0 ✓。用 v 去数 b = (1,0)：黑块落在 v 的位置上只有 1 个，是奇数 → v·b = 1 → 无解。这就解释了上一步"两个格子永远一起翻"的现象：<b>黑块个数的奇偶性不变</b>，所以从 0 块出发永远得不到 1 块。</p>
+    <p>在 1×2 里"黑块个数的奇偶性"这个不变量一眼能看出来。棋盘变大以后，不变量会变得隐蔽——可能是一个看起来毫无规律的图案（比如 4×4 那个八格图案），但它的作用完全一样：<b>它给出一个"永远必须满足的奇偶检查"</b>。</p>
+  </div>
+
+  <div class="card" id="s4">
+    <h2>4. 推导：两边同乘 vᵀ 到底在干什么</h2>
+    <p>现在把第 3 节的直觉写成严格的推导，只有三行。</p>
+    <p>前提：v 满足对每个 j 都有 v·c_j = 0。假设 b 有解，也就是存在某个 x 使得 A·x = b。把 b = A·x 代进 v·b：</p>
+    <div class="mono">v·b = v·(A·x) = (v·A)·x</div>
+    <p>第二行里 (v·A) 是一个横向量，它的第 j 个分量正是 v·c_j = 0。所以 (v·A) 整个是零向量，乘以 x 还是 0：</p>
+    <div class="mono">v·b = 0</div>
+    <p>用矩阵的话说，"两边同乘 vᵀ"：</p>
+    <div class="mono">A·x = b   ⇒   vᵀ·A·x = vᵀ·b   ⇒   0 = vᵀ·b</div>
+    <p>这正是我们想要的判据：<b>只要 b 可解，就必须满足 v·b = 0。</b>反过来说，如果 v·b = 1，直接就可以宣布无解，一个按钮都不用试。</p>
+    <p>拿 1×2 把它全部换成数字：v = (1,1)，b = (1,0)。</p>
+    <div class="mono">v·A = (1,1)·[1 1] = (1·1⊕1·1, 1·1⊕1·1) = (0, 0)
+              [1 1]
+v·b = 1·1 ⊕ 1·0 = 1 ≠ 0  → 无解 ✓
+b = (1,1) 时：v·b = 1⊕1 = 0 → 不被否决，而它确实有解 ✓</div>
+    <p>再强调一次这一步的"人话版"：<b>我们找到了一个守恒量（v 上黑块的奇偶性），全白必须让它等于 0，所以 b 也必须让它等于 0。</b>校验向量就是"守恒量的探头"。</p>
+  </div>
+
+  <div class="card" id="s5">
+    <h2>5. 为什么这些检查是完整的</h2>
+    <p>到这里为止，校验向量只给出了"必要条件"：v·b = 1 一定无解。但会不会出现"所有 v·b 都等于 0，却还是无解"的情况？答案是不会。原因简述如下。</p>
+    <ol>
+      <li>所有校验向量（满足 v·A = 0 的那些 v）本身构成一个线性空间，记它的维数为 <b>k</b>。</li>
+      <li>A 的列空间维数是 <b>rank(A)</b>，而 n 个格子的空间总维数是 n。</li>
+      <li>线性代数里有一条标准结论：这个校验空间恰好是列空间的"正交补"，两者的维数相加正好等于 n，所以 <b>k = n − rank(A)</b>，而且两者互相正交（互相"看得清对方的一切"）。</li>
+      <li>"正交补的正交补等于原来的空间"：b 与所有校验向量都正交 ⟺ b 在 A 的列空间里。</li>
+    </ol>
+    <p>翻译成游戏语言：<b>b 可解 ⟺ 对所有校验向量 v 都有 v·b = 0。</b>所以这些检查既不重复、也不遗漏：k 个独立的校验向量给出的 k 条奇偶检查，就是"能不能解开"的完整判据。</p>
+    <p>这也解释了为什么 k = 0 的尺寸"怎么摆都有解"：一个非零校验向量都没有，说明没有任何约束，所有布局都在列空间里，全都能解开而且解法唯一。</p>
+  </div>
+
+  <div class="card" id="s6">
+    <h2>6. 计数：1/2^k 和 2^k 是怎么来的</h2>
+    <p>既然 k 条检查是完整的，就可以数数了。</p>
+    <p><b>（一）为什么恰好 1/2^k 的布局可解？</b>取 k 个互相独立的校验向量 v₁…v_k，把每个布局 b 送到一组 k 位的结果 (v₁·b, v₂·b, …, v_k·b)。因为它们是互相独立的，这 k 位可以取遍全部 2^k 种组合，而且每种组合对应的布局一样多（总布局 2ⁿ 种，所以每种组合对应 2ⁿ / 2^k = 2^(n−k) 个布局）。可解要求"全是 0"这唯一一种组合，所以可解比例就是</p>
+    <div class="mono">2^(n−k) / 2ⁿ = 1/2^k</div>
+    <p>4×4 的 k = 4 → 1/16；5×5 的 k = 2 → 1/4；9×9 的 k = 8 → 1/256，全都对上了。</p>
+    <p><b>（二）为什么每个可解布局恰好有 2^k 组按法？</b>如果 x₀ 是一组解，那么 x₀ 加上任意一个"零空间向量"（满足 A·x = 0 的 x，也就是按了一整圈却什么都没改变的组合）都还是解。零空间的维数由"秩-零化度定理"给出：n − rank(A) = <b>k</b>（和第 5 节的 k 是同一个数）。所以解的个数是 2^k。</p>
+    <p>注意这里有个很妙的呼应：<b>同一个 k 既决定"可解比例 1/2^k"，又决定"解法数量 2^k"</b>，但两者的原因不同（一个来自校验空间，一个来自零空间）。4×4 既只有 1/16 的布局可解，每个可解布局又恰好有 16 组解法。</p>
+    <p>1×2 是最小的例子：k = 1 → 可解比例 1/2（(0,0) 和 (1,1) 可解），解数 2（b = (1,1) 时按第 1 格或第 2 格都行）✓。</p>
+  </div>
+
+  <div class="card" id="s7">
+    <h2>7. 4×4 实例：亲手验证"每个十字都是偶数"</h2>
+    <p>下面这张图是 4×4 棋盘的第一个校验向量（黑格 = 1）：</p>
+    <div class="grid" id="patGrid"></div>
+    <p class="tip">点任意一个格子，会把它所在的十字（自己和上下左右）描出来，并数出这个十字盖住了几个黑格——不管点哪里都是偶数。</p>
+    <div class="verdict" id="crossInfo">点上面任意一格试试。</div>
+    <p>为什么这能说明问题？因为"每个十字都盖住偶数个黑格"正是第 3 节定义的性质。有了它，这个图案就是一条"守恒量探头"：任何布局只要在它的黑格位置上有奇数个黑块，就是无解。</p>
+    <p>4×4 一共有 <b>k = 4</b> 个互相独立的校验向量（上面是其中一个），所以有 4 条这样的检查，于是 1/16 的布局可解、每个可解布局有 16 组解法。</p>
+    <details>
+      <summary>想看第 2、3、4 个校验向量长什么样？</summary>
+      <div class="grid" id="patGrid2"></div>
+      <p class="tip">上面三个分别是 4×4 的另外三个独立校验向量。把它们任意异或组合，还能得到更多（一共 16 个），但它们不等价于新的检查——独立的只有 4 个。</p>
+    </details>
+  </div>
+
+  <div class="card" id="s8">
+    <h2>8. 怎么系统地找校验向量：递推 + 收口</h2>
+    <p>现在的问题变成：这种"每个十字都偶数"的图案，怎么找？总不能瞎猜。答案是：<b>它可以用和追白法一模一样的手法一行行递推出来</b>。</p>
+    <p>把要造的图案记成 v，逐格看"以某格为中心的十字"。如果已经知道 v 的第 r−1、r 两行，那么为了让第 r 行中间那格的十字是偶数，第 r+1 行的同一列就被唯一确定了：</p>
+    <div class="mono">v[r+1][c] = v[r-1][c] ⊕ v[r][c-1] ⊕ v[r][c] ⊕ v[r][c+1]</div>
+    <p>（边界外的格子当作 0。）于是一旦选定了<b>第一行</b>，整张图就被唯一确定：</p>
+    <ol>
+      <li>第 0 行：随便选（一共有 2^列数 种选法）；</li>
+      <li>第 1 行：由第 0 行的十字条件逼出来，v[1][c] = v[0][c-1] ⊕ v[0][c] ⊕ v[0][c+1]；</li>
+      <li>之后每行都用上面的公式往下推；</li>
+      <li><b>最后一行也必须满足条件</b>——这个"收口"步骤会对第一行提出要求。</li>
+    </ol>
+    <p>把"能不能收口"写成一个线性条件，它就是追白法页面里的那个响应矩阵 <b>M</b>：能收口的第一行恰好是 M 的零空间。</p>
+    <div class="mono">校验向量的个数 = 2^k，  k = dim( M 的零空间 )</div>
+    <p>具体例子：</p>
+    <ul>
+      <li><b>4×4</b>：M 是零矩阵（rank 0）→ 第一行怎么选都能收口 → 16 个校验向量（k = 4）。</li>
+      <li><b>5×5</b>：rank(M) = 3 → 零空间维数 2 → 4 个校验向量（k = 2）。</li>
+      <li><b>9×9</b>：rank(M) = 1 → 零空间维数 8 → 256 个校验向量（k = 8）。</li>
+      <li><b>5×6</b>、<b>6×6</b>：M 满秩 → 只有"全 0 第一行"能收口 → 没有非零校验向量（k = 0）→ 全可解。</li>
+    </ul>
+    <p>想让手感更具体，可以到"哪些尺寸会无解"页面里的实验区，自己点亮第一行，看它能不能收口（会实时标出失败位置）。</p>
+  </div>
+
+  <div class="card" id="s9">
+    <h2>9. 为什么偏偏是这几种尺寸（含多项式手算）</h2>
+    <p>第 8 节说明了一件事：<b>k 只跟尺寸有关</b>——因为 M 就是"递推走若干步"的结果，尺寸决定了这个矩阵长什么样。所以"有没有非零校验向量"是尺寸的函数，会按固定周期重复。用代码从 n = 2 数到 n = 30，实测的规律是：</p>
+    <div class="mono">2×n：n 为奇数（周期 2）
+3×n：n ≡ 2 (mod 3)（周期 3）
+4×n：n ≡ 4 (mod 5)（周期 5）
+5×n：n mod 6 属于 {1,2,3,5}（周期 6）
+6×n：n ≡ 8 (mod 9)（周期 9）
+7×n：n ≡ 2 (mod 3)（周期 3）
+8×n：最小周期 14
+9×n：最小周期 15</div>
+    <p>正方形里（2~25）有死局的是：<b>4×4、5×5、9×9、11×11、14×14、16×16、17×17、19×19、23×23、24×24</b>；其余正方形（3×3、6×6、7×7、8×8、10×10、12×12、25×25……）全可解。</p>
+    <p>更精确地说，k 可以用下面这串多项式算出来（不用真的去算矩阵）：先在 GF(2) 上定义一串多项式</p>
+    <div class="mono">D_0 = 1,  D_1 = x,  D_{k+1} = x·D_k + D_{k-1}</div>
+    <p>（"加"就是异或，"乘"就是普通多项式乘法但系数只有 0/1。）那么</p>
+    <div class="mono">k(m, n) = deg gcd( D_m(x), D_n(x+1) )</div>
+    <p>也就是"两个多项式的公共因子的次数"。这个公式我在 2×2 ~ 25×25 的全部尺寸上都用代码验证过，0 处不符。它的意思很直白：<b>m 和 n 这两个尺寸各自产生一个多项式，只有当它们"有公共因子"时才有非零校验向量，公共因子的次数就是 k。</b></p>
+    <h3>手算三个例子（这才是"为什么"）</h3>
+    <p><b>例 1：5×6 为什么全可解？</b></p>
+    <div class="mono">D_5 = x⁵ + x = x(x+1)⁴        （只有 x 和 x+1 这两个因子）
+D_6 = x⁶ + x⁴ + 1
+
+代入检验：
+  D_6 在 x = 0 处 = 1 ≠ 0  → x 不是它的因子
+  D_6 在 x = 1 处 = 1⊕1⊕1 = 1 ≠ 0 → x+1 也不是它的因子
+
+所以 D_5 和 D_6(x+1) 没有公共因子 → k = 0 → 5×6 全可解 ✓</div>
+    <p><b>例 2：5×5 为什么 k = 2？</b></p>
+    <div class="mono">D_5      = x⁵ + x     = x·(x+1)⁴
+D_5(x+1) = x⁵ + x⁴    = x⁴·(x+1)
+
+公共因子 = x·(x+1)，次数 2 → k = 2 → 1/4 可解、4 组解法 ✓</div>
+    <p><b>例 3：4×4 为什么 k = 4？</b></p>
+    <div class="mono">D_4 = x⁴ + x² + 1 = (x² + x + 1)²
+
+把 x 换成 x+1 会发现 x²+x+1 完全不变：
+  (x+1)² + (x+1) + 1 = x²+x+1
+所以 D_4(x+1) = D_4，两个多项式完全相同，
+公共因子就是 D_4 本身，次数 4 → k = 4 → 1/16 可解、16 组解法 ✓</div>
+    <p>这就是"为什么是这几种尺寸"的完整答案：尺寸决定多项式，多项式的公共因子决定 k，而公共因子的"周期"就那么几个（2、3、5、6、9、14、15……），所以有死局的尺寸按这些周期重复出现。</p>
+  </div>
+
+  <div class="card" id="s10">
+    <h2>10. 常见疑问</h2>
+    <details>
+      <summary>为什么"v 上有奇数个黑块"就一定无解？</summary>
+      <p>因为"v 上黑块个数的奇偶性"是一个守恒量（每一步都翻转偶数个），从全白（偶数）出发永远只能得到偶数。奇数就矛盾了。</p>
+    </details>
+    <details>
+      <summary>为什么 k = 0 就"怎么摆都有解"？</summary>
+      <p>k = 0 意味着没有非零校验向量，也就是没有任何守恒量能挡住你；从第 5 节的判据看，所有布局都通过了全部（零条）检查，所以全部可解，而且因为零空间也只有 0，解法唯一。</p>
+    </details>
+    <details>
+      <summary>为什么"可解比例 1/2^k"和"解数 2^k"里是同一个 k？</summary>
+      <p>因为它其实出现在两处不同的推论里，但数值相同：校验空间的维数 = n − rank(A)（决定可解比例），零空间的维数也 = n − rank(A)（决定解数）。两条线都归结到 n − rank(A)。</p>
+    </details>
+    <details>
+      <summary>为什么按两次等于没按？</summary>
+      <p>翻转两次就回到原样，用异或写就是 a⊕a = 0。这也是"每格只需要一个 0/1 变量"和"按法可以交换顺序"的根源。</p>
+    </details>
+    <details>
+      <summary>校验向量和追白法是什么关系？</summary>
+      <p>构造方式一模一样：都是"选好第一行，然后一行行往下推"。区别只是递推公式来自不同的条件（追白法要求"清掉上一行"，校验向量要求"每个十字偶数"），而两者的"收口条件"却是同一个矩阵 M。所以 k 既是"校验向量个数的指数"，也是"追白法第一行自由度的指数"。</p>
+    </details>
+    <details>
+      <summary>游戏里为什么随机开局从来不会遇到无解？</summary>
+      <p>因为随机开局是"从全白开始随机点若干下"生成的。点出来的布局天然满足所有守恒量（v·b = 0），所以一定可解。只有你在"自定义"里手动摆的黑块，才可能违反某条守恒量从而无解。</p>
+    </details>
+  </div>
+
+  <div class="card" id="s11">
+    <h2>11. 练一练（附答案）</h2>
+    <details>
+      <summary>1. 1×2 棋盘上，b = (1,1) 有几种按法？</summary>
+      <p>2 种：x = (1,0) 或 (0,1)。k = 1，所以解数 = 2^1 = 2。</p>
+    </details>
+    <details>
+      <summary>2. 1×2 棋盘上的校验向量是什么？它守的是什么量？</summary>
+      <p>v = (1,1)。它守的量是"黑块个数的奇偶性"：每次按键翻转 2 个格子，黑块个数的奇偶性不变。</p>
+    </details>
+    <details>
+      <summary>3. 4×4 的 k = 4，那么"可解比例"和"每个可解布局的解数"分别是多少？</summary>
+      <p>可解比例 1/2^4 = 1/16；解数 2^4 = 16。</p>
+    </details>
+    <details>
+      <summary>4. 用多项式解释：为什么 5×6 全可解，而 5×5 不是？</summary>
+      <p>D_5 = x(x+1)⁴ 只有 x、x+1 两个因子；D_6 = x⁶+x⁴+1 代入 0 得 1、代入 1 得 1，所以既不含 x 也不含 x+1 因子，和 D_5(x+1) 互素 → k = 0 → 5×6 全可解。而 5×5 时 D_5 和 D_5(x+1) 共享 x(x+1)，次数 2 → k = 2 → 1/4 可解。</p>
+    </details>
+    <details>
+      <summary>5. 为什么"随机开局"不会无解，而"自定义摆黑块"可能无解？</summary>
+      <p>随机开局是点击出来的（满足所有守恒量）；自定义布局是你自由摆的，可能恰好在某个校验向量上盖了奇数个黑块，于是违反守恒量，变成无解。</p>
+    </details>
+  </div>
+
+  <div class="card">
+    <p>继续看：<a class="link" href="sizes.html">→ 哪些尺寸会无解（含互动实验）</a> · <a class="link" href="gauss_demo.html">→ 高斯消元演示</a> · <a class="link" href="index.html">→ 回游戏</a></p>
+  </div>
+</div>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+
+/* 用与游戏相同的 GF(2) 算法，现场算出 4×4 的四个校验向量 */
+function equationRows(r, c) {
+  const list = [];
+  for (let i = 0; i < r; i++) for (let j = 0; j < c; j++) {
+    let m = 0n;
+    const add = (rr, cc) => { m |= 1n << BigInt(rr * c + cc); };
+    add(i, j);
+    if (i > 0) add(i - 1, j);
+    if (i < r - 1) add(i + 1, j);
+    if (j > 0) add(i, j - 1);
+    if (j < c - 1) add(i, j + 1);
+    list.push(m);
+  }
+  return list;
+}
+function parityBasis(r, c) {
+  const n = r * c;
+  const data = equationRows(r, c).map((m, i) => [m, 1n << BigInt(i)]);
+  let rank = 0;
+  for (let col = 0; col < n; col++) {
+    let pick = -1;
+    for (let i = rank; i < data.length; i++) if ((data[i][0] >> BigInt(col)) & 1n) { pick = i; break; }
+    if (pick < 0) continue;
+    [data[rank], data[pick]] = [data[pick], data[rank]];
+    for (let i = 0; i < data.length; i++) {
+      if (i !== rank && ((data[i][0] >> BigInt(col)) & 1n)) {
+        data[i][0] ^= data[rank][0];
+        data[i][1] ^= data[rank][1];
+      }
+    }
+    rank++;
+  }
+  return data.filter(([a]) => a === 0n).map(([, e]) => e);
+}
+
+const R = 4, C = 4;
+const BASIS = parityBasis(R, C);
+
+function drawPattern(el, mask) {
+  el.innerHTML = "";
+  el.style.gridTemplateColumns = `repeat(${C}, 16px)`;
+  for (let i = 0; i < R * C; i++) {
+    const d = document.createElement("div");
+    d.className = "cell" + (((mask >> BigInt(i)) & 1n) ? " on" : "");
+    d.dataset.i = i;
+    el.appendChild(d);
+  }
+}
+
+drawPattern($("#patGrid"), BASIS[0]);
+if ($("#patGrid2")) {
+  const box = $("#patGrid2");
+  box.style.gridTemplateColumns = `repeat(${C * 2}, 16px)`;
+  box.style.gap = "14px 22px";
+  for (let b = 1; b < BASIS.length; b++) {
+    const wrap = document.createElement("div");
+    wrap.className = "grid";
+    wrap.style.gridTemplateColumns = `repeat(${C}, 16px)`;
+    wrap.style.gap = "3px";
+    for (let i = 0; i < R * C; i++) {
+      const d = document.createElement("div");
+      d.className = "cell" + (((BASIS[b] >> BigInt(i)) & 1n) ? " on" : "");
+      wrap.appendChild(d);
+    }
+    box.appendChild(wrap);
+  }
+}
+
+/* 点任意格子，描出它的十字并数黑格 */
+$("#patGrid").addEventListener("click", (e) => {
+  const cell = e.target.closest(".cell");
+  if (!cell) return;
+  const i = Number(cell.dataset.i);
+  const r = Math.floor(i / C), c = i % C;
+  const cross = [];
+  const push = (rr, cc) => { if (rr >= 0 && rr < R && cc >= 0 && cc < C) cross.push(rr * C + cc); };
+  push(r, c);
+  push(r - 1, c); push(r + 1, c); push(r, c - 1); push(r, c + 1);
+  let count = 0;
+  const kids = $("#patGrid").children;
+  for (let k = 0; k < kids.length; k++) {
+    const on = kids[k].classList.contains("on");
+    const inCross = cross.includes(k);
+    kids[k].classList.toggle("crossOn", inCross);
+    if (on && inCross) count++;
+  }
+  const el = $("#crossInfo");
+  el.className = "verdict " + (count % 2 === 0 ? "ok" : "bad");
+  el.textContent = `以 (${r + 1},${c + 1}) 为中心的十字盖住了 ${count} 个黑格 —— ${count % 2 === 0 ? "偶数 ✓（符合校验向量的性质）" : "奇数（不该发生）"}。`;
+});
+</script>
+</body>
+</html>
