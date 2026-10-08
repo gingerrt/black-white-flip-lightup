@@ -45,6 +45,22 @@ details p{margin:8px 0 0}
 .verdict{font-size:13.5px;line-height:1.6;padding:10px 12px;border-radius:10px;background:#f6f7fb;margin-top:8px}
 .verdict.ok{background:#eaf7ef;color:var(--ok)}
 .verdict.bad{background:#fdeeee;color:var(--bad)}
+button{border:0;border-radius:12px;padding:11px 10px;font-size:13.5px;font-family:inherit;background:#eef1f6;color:var(--text);flex:1;touch-action:manipulation}
+button.primary{background:var(--accent);color:#fff}
+button:active{transform:translateY(1px)}
+button:disabled{opacity:.45}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 10px}
+.chip{flex:0 0 auto;border:1px solid #d9dde6;background:#fff;border-radius:999px;padding:7px 13px;font-size:13px}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.demoRow{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.demoBox{background:#f7f8fc;border-radius:10px;padding:8px 10px;margin-top:10px}
+.demoLabel{font-size:11.5px;color:var(--muted);margin-bottom:5px}
+.solList{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.6;max-height:170px;overflow:auto}
+.solList .sel{background:#fde68a;border-radius:4px;padding:0 3px}
+.cell.unknown{background:#eef0f5;border:1px dashed #c9cfda}
+.cell.operand{outline:2px solid #3b82f6;outline-offset:-2px}
+.cell.justRow{outline:2px solid #f59e0b;outline-offset:-2px}
+.demoBtns{display:flex;gap:8px;margin-top:10px}
 </style>
 </head>
 <body>
@@ -53,6 +69,33 @@ details p{margin:8px 0 0}
     <h1>完整推导：<br>A·x = b 是怎么变成"校验向量"的</h1>
     <a class="link" href="sizes.html">← 尺寸规则</a>
   </header>
+
+  <div class="card">
+    <h2>动画演示：M·x = 0 → 取一个非平凡解 → 铺出校验向量</h2>
+    <p class="tip">建议先看这个演示，再往下读长文。选一个尺寸，用「下一步」或「自动播放」逐步走。</p>
+    <div class="chips" id="demoChips"></div>
+    <div class="verdict" id="demoNarr">准备中…</div>
+    <div class="demoRow">
+      <div class="demoBox">
+        <div class="demoLabel">M（响应矩阵，c×c，黑格 = 1）</div>
+        <div class="grid" id="demoM"></div>
+      </div>
+      <div class="demoBox" style="flex:1 1 190px">
+        <div class="demoLabel">M·x = 0 的全部解（x = 第一行按法）</div>
+        <div class="solList" id="demoSols"></div>
+      </div>
+    </div>
+    <div class="demoBox">
+      <div class="demoLabel">校验向量 v：逐行铺出来（虚线 = 还没算，蓝框 = 算中间格用到的格子，黄框 = 刚算出的行）</div>
+      <div class="grid" id="demoPat"></div>
+    </div>
+    <div class="demoBtns">
+      <button id="demoPrev">上一步</button>
+      <button id="demoNext" class="primary">下一步</button>
+      <button id="demoPlay">自动播放</button>
+      <button id="demoReset">重新开始</button>
+    </div>
+  </div>
 
   <div class="card">
     <p>这份长文把"哪些尺寸会无解"里那句 <b>A·x = b</b> 从头拆开讲：先讲清每个符号对应棋盘的什么，再用一个 1×2 的小棋盘把所有东西手算一遍，然后一步步推到"校验向量"，最后解释为什么尺寸会决定有没有校验向量。慢慢看，每一步都有实际数字对得上。</p>
@@ -425,6 +468,205 @@ $("#patGrid").addEventListener("click", (e) => {
   el.className = "verdict " + (count % 2 === 0 ? "ok" : "bad");
   el.textContent = `以 (${r + 1},${c + 1}) 为中心的十字盖住了 ${count} 个黑格 —— ${count % 2 === 0 ? "偶数 ✓（符合校验向量的性质）" : "奇数（不该发生）"}。`;
 });
+/* ---------- 顶部动画演示：M·x = 0 → 非平凡解 → 校验向量 ---------- */
+const DEMO = { rows: 5, cols: 5, sols: [], pick: 0, k: 0, v: null, steps: [], index: -1, playing: false, timer: null };
+
+function demoChaseColumns(r, c) {
+  const out = [];
+  for (let j = 0; j < c; j++) {
+    const board = Array.from({ length: r }, () => new Array(c).fill(0));
+    const hit = (rr, cc) => {
+      board[rr][cc] ^= 1;
+      if (rr > 0) board[rr - 1][cc] ^= 1;
+      if (rr < r - 1) board[rr + 1][cc] ^= 1;
+      if (cc > 0) board[rr][cc - 1] ^= 1;
+      if (cc < c - 1) board[rr][cc + 1] ^= 1;
+    };
+    hit(0, j);
+    for (let rr = 1; rr < r; rr++) {
+      for (let cc = 0; cc < c; cc++) if (board[rr - 1][cc]) hit(rr, cc);
+    }
+    let mask = 0;
+    for (let cc = 0; cc < c; cc++) if (board[r - 1][cc]) mask |= 1 << cc;
+    out.push(mask);
+  }
+  return out;
+}
+
+function demoKernel(r, c) {
+  const M = demoChaseColumns(r, c);
+  const out = [];
+  for (let p = 0; p < (1 << c); p++) {
+    let acc = 0;
+    for (let j = 0; j < c; j++) if ((p >> j) & 1) acc ^= M[j];
+    if (acc === 0) out.push(p);
+  }
+  return out;
+}
+
+function demoBuildV(r, c, p) {
+  const v = Array.from({ length: r }, () => new Array(c).fill(0));
+  for (let j = 0; j < c; j++) v[0][j] = (p >> j) & 1;
+  const val = (rr, cc) => (rr < 0 || rr >= r || cc < 0 || cc >= c) ? 0 : v[rr][cc];
+  if (r > 1) {
+    for (let j = 0; j < c; j++) v[1][j] = val(0, j) ^ val(0, j - 1) ^ val(0, j + 1);
+  }
+  for (let i = 1; i < r - 1; i++) {
+    for (let j = 0; j < c; j++) v[i + 1][j] = val(i - 1, j) ^ val(i, j) ^ val(i, j - 1) ^ val(i, j + 1);
+  }
+  return v;
+}
+
+function demoBits(p, c) {
+  let s = "";
+  for (let j = 0; j < c; j++) s += String((p >> j) & 1);
+  return s;
+}
+
+function demoStop() {
+  DEMO.playing = false;
+  const b = document.getElementById("demoPlay");
+  if (b) b.textContent = "自动播放";
+  if (DEMO.timer !== null) { clearTimeout(DEMO.timer); DEMO.timer = null; }
+}
+
+function demoInit(r, c) {
+  demoStop();
+  DEMO.rows = r; DEMO.cols = c;
+  DEMO.sols = demoKernel(r, c);
+  DEMO.k = Math.round(Math.log2(DEMO.sols.length));
+  const nz = DEMO.sols.filter((p) => p !== 0);
+  DEMO.pick = nz.length ? nz[Math.floor(Math.random() * nz.length)] : 0;
+  DEMO.v = demoBuildV(r, c, DEMO.pick);
+  DEMO.steps = ["M", "solve", "solutions"];
+  if (nz.length) {
+    DEMO.steps.push("pick");
+    for (let i = 0; i < r; i++) DEMO.steps.push("row" + i);
+    DEMO.steps.push("done");
+  } else {
+    DEMO.steps.push("none");
+  }
+  DEMO.index = -1;
+  demoRenderChips();
+  demoNext();
+}
+
+function demoRenderChips() {
+  const el = document.getElementById("demoChips");
+  el.innerHTML = "";
+  for (const [r, c] of [[4, 4], [5, 5], [6, 6]]) {
+    const k = Math.round(Math.log2(demoKernel(r, c).length));
+    const b = document.createElement("button");
+    b.className = "chip" + (r === DEMO.rows && c === DEMO.cols ? " active" : "");
+    b.textContent = `${r}×${c}（k=${k}）`;
+    b.addEventListener("click", () => demoInit(r, c));
+    el.appendChild(b);
+  }
+}
+
+function demoRender() {
+  const r = DEMO.rows, c = DEMO.cols;
+  const step = DEMO.steps[DEMO.index];
+  const M = demoChaseColumns(r, c);
+  const mEl = document.getElementById("demoM");
+  mEl.innerHTML = "";
+  mEl.style.gridTemplateColumns = `repeat(${c}, 18px)`;
+  for (let i = 0; i < c; i++) {
+    for (let j = 0; j < c; j++) {
+      const d = document.createElement("div");
+      d.className = "cell" + (((M[j] >> i) & 1) ? " on" : "");
+      d.style.width = d.style.height = "18px";
+      mEl.appendChild(d);
+    }
+  }
+  const sEl = document.getElementById("demoSols");
+  sEl.innerHTML = "";
+  if (step === "M" || step === "solve") {
+    sEl.textContent = "（先解 M·x = 0）";
+  } else {
+    for (const p of DEMO.sols) {
+      const div = document.createElement("div");
+      const chosen = p === DEMO.pick && p !== 0;
+      div.className = chosen ? "sel" : "";
+      div.textContent = demoBits(p, c) + (p === 0 ? "  ← 全 0（平凡）" : chosen ? "  ← 选它" : "");
+      sEl.appendChild(div);
+    }
+  }
+  const pEl = document.getElementById("demoPat");
+  pEl.innerHTML = "";
+  pEl.style.gridTemplateColumns = `repeat(${c}, 18px)`;
+  let upto = -1;
+  if (step.startsWith("row")) upto = Number(step.slice(3));
+  if (step === "done") upto = r - 1;
+  const operands = new Set();
+  if (step.startsWith("row") && upto >= 1) {
+    const mid = Math.floor(c / 2);
+    const add = (rr, cc) => { if (rr >= 0 && rr < r && cc >= 0 && cc < c) operands.add(rr * c + cc); };
+    add(upto - 2, mid); add(upto - 1, mid - 1); add(upto - 1, mid); add(upto - 1, mid + 1);
+  }
+  for (let i = 0; i < r; i++) {
+    for (let j = 0; j < c; j++) {
+      const d = document.createElement("div");
+      let cls = "cell";
+      if (i > upto) cls += " unknown";
+      else if (DEMO.v[i][j]) cls += " on";
+      if (operands.has(i * c + j)) cls += " operand";
+      if (step.startsWith("row") && i === upto && upto >= 0) cls += " justRow";
+      d.className = cls;
+      d.style.width = d.style.height = "18px";
+      pEl.appendChild(d);
+    }
+  }
+  const nEl = document.getElementById("demoNarr");
+  let text = "";
+  if (step === "M") text = "① 先算 M：第一行只按第 j 格、追白到底，最后一行的残留就是 M 的第 j 列。";
+  else if (step === "solve") text = "② 解齐次方程 M·x = 0 —— 它的解就是「能收口的第一行」的候选。";
+  else if (step === "solutions") text = `③ M·x = 0 一共有 2^${DEMO.k} = ${DEMO.sols.length} 个解（包含全 0）。` + (DEMO.sols.length === 1 ? " 只有全 0，所以没有非平凡解。" : "");
+  else if (step === "pick") text = `④ 随便挑一个非平凡解：x = ${demoBits(DEMO.pick, c)}（选全 0 的话铺出来也是全 0，没意思）。`;
+  else if (step.startsWith("row")) {
+    const i = Number(step.slice(3));
+    if (i === 0) text = `第 0 行 = x = ${demoBits(DEMO.pick, c)}，直接填上。`;
+    else if (i === 1) text = "第 1 行：v[1][c] = v[0][c-1] ⊕ v[0][c] ⊕ v[0][c+1]。蓝框是算「中间那格」用到的格子，黄框是刚算出的这一行。";
+    else text = `第 ${i} 行：v[${i}][c] = v[${i - 2}][c] ⊕ v[${i - 1}][c-1] ⊕ v[${i - 1}][c] ⊕ v[${i - 1}][c+1]。蓝框 = 算中间格用到的 4 个格子，黄框 = 刚算出的行。`;
+  } else if (step === "done") {
+    let allEven = true;
+    for (let i = 0; i < r; i++) {
+      for (let j = 0; j < c; j++) {
+        let s = 0;
+        const add = (rr, cc) => { if (rr >= 0 && rr < r && cc >= 0 && cc < c) s ^= DEMO.v[rr][cc]; };
+        add(i, j); add(i - 1, j); add(i + 1, j); add(i, j - 1); add(i, j + 1);
+        if (s) allEven = false;
+      }
+    }
+    text = `铺完了！这个图案就是一个校验向量：每个十字都盖住偶数个 1（当场检查：${allEven ? "全部通过 ✓" : "有错（不该发生）"}）。以后拿它去数任何布局的黑块奇偶性就行。`;
+  } else if (step === "none") {
+    text = "这个尺寸 M·x = 0 只有全 0 解 → 没有非平凡解 → 没有非零校验向量 → 它「全可解」：任何布局都有唯一解。";
+  }
+  nEl.textContent = `第 ${DEMO.index + 1} / ${DEMO.steps.length} 步 · ${text}`;
+}
+
+function demoNext() { demoStop(); if (DEMO.index >= DEMO.steps.length - 1) return; DEMO.index++; demoRender(); }
+function demoPrev() { demoStop(); if (DEMO.index <= 0) return; DEMO.index--; demoRender(); }
+function demoPlay() {
+  if (DEMO.playing) { demoStop(); return; }
+  if (DEMO.index >= DEMO.steps.length - 1) return;
+  DEMO.playing = true;
+  document.getElementById("demoPlay").textContent = "暂停";
+  demoTick();
+}
+function demoTick() {
+  if (!DEMO.playing) return;
+  if (DEMO.index >= DEMO.steps.length - 1) { demoStop(); return; }
+  DEMO.index++;
+  demoRender();
+  DEMO.timer = setTimeout(demoTick, 1100);
+}
+
+document.getElementById("demoNext").addEventListener("click", demoNext);
+document.getElementById("demoPrev").addEventListener("click", demoPrev);
+document.getElementById("demoPlay").addEventListener("click", demoPlay);
+document.getElementById("demoReset").addEventListener("click", () => demoInit(DEMO.rows, DEMO.cols));
+demoInit(5, 5);
 </script>
 </body>
 </html>
